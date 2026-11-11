@@ -1,0 +1,66 @@
+{
+	"chars": {
+		"engineer": {
+			"anchor": [
+				16.0,
+				29
+			],
+			"size": 32
+		},
+		"grunt": {
+			"anchor": [
+				16.0,
+				29
+			],
+			"size": 32
+		},
+		"healer": {
+			"anchor": [
+				16.0,
+				29
+			],
+			"size": 32
+		},
+		"scout": {
+			"anchor": [
+				16.0,
+				29
+			],
+			"size": 32
+		},
+		"spitter": {
+			"anchor": [
+				16.0,
+				29
+			],
+			"size": 32
+		},
+		"wrecker": {
+			"anchor": [
+				20.0,
+				38
+			],
+			"size": 40
+		}
+	},
+	"dirs": [
+		"right",
+		"down",
+		"left",
+		"up"
+	],
+	"fps": {
+		"idle": 2.0,
+		"run": 8.0
+	},
+	"frames": {
+		"idle": [
+			0,
+			2
+		],
+		"run": [
+			2,
+			4
+		]
+	}
+}

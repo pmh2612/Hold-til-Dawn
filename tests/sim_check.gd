@@ -102,6 +102,7 @@ func _init() -> void:
 	s.action(1, "skip", 0)
 	run(s, 0.1)
 	run(s, 16, "night")
+	s.next_wave = INF  # isolate door entry and repair from the faster night waves
 	var e1 = s.players[1]
 	var sc2 = s.players[2]
 	e1.pos = s.DOOR_POS[0] + s.DOOR_DIR[0] * 32
@@ -224,8 +225,9 @@ func _init() -> void:
 	check(walk.call(Vector2(-G.HALF.x - 40, 60), Vector2(2, 0), [true, true, true]).x < -G.HALF.x, "west wall beside door A blocks")
 
 	# Geometry from the GDD (BAL-21, BAL-34, section 4.3)
-	check(G.HALF == Vector2(15, 10) * 16 and G.DOOR_POS[0].x < 0 and G.DOOR_POS[1].y < 0 and G.DOOR_POS[2].x > 0, "15 x 10 base, doors A west, B north, C east")
+	check(G.HALF == Vector2(11, 7) * 16 and G.DOOR_POS[0].x < 0 and G.DOOR_POS[1].y < 0 and G.DOOR_POS[2].x > 0, "11 x 7 base, doors A west, B north, C east")
 	s = new_match()
+	s.rng.seed = 42
 	s.k = 3
 	s.active = [0, 1, 2]
 	s._spawn_wave()
@@ -235,16 +237,187 @@ func _init() -> void:
 		var fwd := rel.dot(dd) / 32.0
 		return fwd >= 24.99 and fwd <= 35.01 and absf(rel.dot(Vector2(-dd.y, dd.x))) <= 22.01 * 32
 	var south = func(e) -> bool: return absf(e.pos.x) < G.HALF.x and e.pos.y > G.HALF.y
-	check(s.enemies.size() > 0 and (G.SPAWN_ALL_SIDES or s.enemies.all(in_band)), "night spawns in a band 25-35 tiles in front of each active door")
-	check(G.SPAWN_ALL_SIDES or not s.enemies.any(south), "no night spawn south of the base")
+	check(not s.enemies.is_empty(), "night wave spawns enemies")
+	if G.SPAWN_ALL_SIDES:
+		check(s.enemies.all(func(e): return e.pos.length() <= G.ISLAND - 2 * G.T + 0.01 and G.wall_dist(e.pos) >= 8 * G.T), "wave spawns stay on the island and outside the base")
+		check(s.enemies.any(func(e): return e.pos.x < -G.HALF.x) and s.enemies.any(func(e): return e.pos.x > G.HALF.x) and s.enemies.any(func(e): return e.pos.y < -G.HALF.y) and s.enemies.any(func(e): return e.pos.y > G.HALF.y), "night wave comes from west, east, north and south")
+		check(s.enemies.any(func(e): return G.wall_dist(e.pos) < 20 * G.T) and s.enemies.any(func(e): return G.wall_dist(e.pos) > 45 * G.T), "night wave spreads from near the base to the outer island")
+		check(s.enemies.all(func(e): return e.door == s._nearest_active_door(e.pos)), "each enemy heads for its nearest attacked door")
+	else:
+		check(s.enemies.all(in_band), "night spawns in a band 25-35 tiles in front of each active door")
+		check(not s.enemies.any(south), "no night spawn south of the base")
 	check(s.nodes.all(func(n): return not G.in_door_lane(n.pos) and (G.wall_dist(n.pos) <= 20 * 32 if n.type < 3 else G.wall_dist(n.pos) > 20 * 32)), "resource nodes in the safe zone, metal beyond it, door corridors clear")
 	s.k = 2
 	s.active = [1]
 	s._spawn_boss()
 	var b = s._boss()
 	check(b != null and b.pos.distance_to(G.DOOR_POS[1] + G.DOOR_DIR[1] * 60 * 32) < 1.0, "boss starts 60 tiles in front of its door")
+	check(absf(b.spd - 1.62 * G.T) < 0.01, "night-2 boss moves at half its original speed")
 
 	var snap = s.snapshot()
 	check(snap.has("ps") and snap.ps.size() == 2, "snapshot has both players")
+
+	# Movement and wave timing for the faster, island-wide attacks.
+	s = new_match()
+	var slow = s._spawn(G.GRUNT, 0, 20.0, false)
+	var origin: Vector2 = slow.pos
+	s._tick_enemies(1.0)
+	check(absf(slow.pos.distance_to(origin) - 48.0) < 0.01, "night-1 Grunt travels 1.5 tiles per second")
+	s.enemies.clear()
+	s._night()
+	s.elapsed = 4.99
+	s._tick_waves()
+	check(s.wave == 0 and s.enemies.is_empty(), "no wave before 5 seconds")
+	s.elapsed = 5.0
+	s._tick_waves()
+	check(s.wave == 1 and not s.enemies.is_empty(), "first wave arrives at 5 seconds")
+	s.elapsed = 34.99
+	s._tick_waves()
+	check(s.wave == 1, "normal waves wait 30 seconds")
+	s.elapsed = 35.0
+	s._tick_waves()
+	check(s.wave == 2, "second wave arrives at 35 seconds")
+	s.k = 5
+	s.enemies.clear()
+	s._night()
+	s.elapsed = 5.0
+	s._tick_waves()
+	s.elapsed = 19.99
+	s._tick_waves()
+	check(s.wave == 1, "final-night waves wait 15 seconds")
+	s.elapsed = 20.0
+	s._tick_waves()
+	check(s.wave == 2, "final-night second wave arrives at 20 seconds")
+
+	# Towers (AGT-12, MEC-11, MEC-28, BAL-28)
+	s = new_match()
+	var te = s.players[1]
+	var ts = s.players[2]
+	te.pos = G.DOOR_POS[0] + G.DOOR_DIR[0] * 1.5 * 32
+	s.action(1, "tower", 0)
+	check(s.towers[0] == null and s.free_tower, "no tower closer than 3 tiles to a door")
+	ts.pos = G.DOOR_POS[0] + G.DOOR_DIR[0] * 5 * 32
+	s.action(2, "tower", 0)
+	check(s.towers[0] == null, "only an Engineer builds towers")
+	te.pos = G.DOOR_POS[0] + G.DOOR_DIR[0] * 5 * 32
+	s.action(1, "tower", 0)
+	var tw = s.towers[0]
+	check(tw != null and tw.hp == 300.0 and not s.free_tower and te.inv.wood == 0, "the free tower is placed 3-8 tiles in front of door A at no cost")
+	te.pos = G.DOOR_POS[2] + G.DOOR_DIR[2] * 5 * 32
+	te.inv.wood = 20
+	te.inv.metal = 10
+	s.action(1, "tower", 0)
+	check(s.towers[2] == null and te.inv.wood == 20, "a second tower is locked until the first boss is killed")
+	s.unlock = 2
+	s.action(1, "tower", 0)
+	check(s.towers[2] != null and te.inv.wood == 10 and te.inv.metal == 5, "an unlocked tower costs 10 wood + 5 metal")
+	te.pos = G.DOOR_POS[2] + G.DOOR_DIR[2] * 6 * 32
+	s.action(1, "tower", 0)
+	check(te.inv.wood == 10, "one tower per door")
+	var tg = s._spawn(G.GRUNT, 0, 0.0)
+	tg.pos = tw.pos + Vector2(0, 4 * 32)
+	tg.state = 4
+	tg.home = tg.pos
+	tg.wander = tg.pos
+	te.pos = Vector2.ZERO
+	ts.pos = Vector2.ZERO
+	run(s, 3.0)
+	check(tg.hp < tg.maxhp - 20 and tg.hp > tg.maxhp - 28, "a tower shoots the nearest enemy within 6 tiles at 8 DPS (%.1f)" % (tg.maxhp - tg.hp))
+	run(s, 6.0)
+	check(not s.enemies.has(tg), "a tower kills on its own")
+	var far_e = s._spawn(G.GRUNT, 0, 0.0)
+	far_e.pos = tw.pos + Vector2(0, 7 * 32)
+	far_e.state = 4
+	far_e.home = far_e.pos
+	far_e.wander = far_e.pos
+	var hp0: float = far_e.hp
+	run(s, 1.0)
+	check(far_e.hp == hp0, "nothing beyond 6 tiles is shot")
+	s.enemies.clear()
+
+	s.phase = "night"
+	s.next_wave = INF  # tower behaviour is checked without unrelated wave attackers
+	s.towers[2] = null
+	var g2 = s._spawn(G.GRUNT, 0, 0.0)
+	g2.pos = tw.pos + G.DOOR_DIR[0] * 10 * 32
+	g2.hp = 1000.0
+	run(s, 8.0)  # half-speed enemy must cross the light and reach the tower before hitting it
+	check(g2.state == 5 and tw.hp < 300.0 and s.doors[0] == G.DOOR_HP, "at night an enemy entering the light attacks the tower before its door")
+	g2.cd = 99.0
+	te.pos = tw.pos + Vector2(0, 32)
+	te.inv.wood = 5
+	te.inter = true
+	var thp: float = tw.hp
+	run(s, 3.0)  # a hit blocks repair for 2 s (FML-08)
+	check(tw.hp > thp, "the Engineer repairs a tower like a door")
+	te.inter = false
+	g2.cd = 0.0
+	tw.hp = 5.0
+	run(s, 0.5)
+	check(tw.hp == 0.0 and tw.wrecked and s.snapshot().tw[0][3], "a tower at 0 HP is destroyed")
+	run(s, 0.2)
+	check(g2.state != 5, "enemies locked on a fallen tower walk on to their door")
+	te.inter = true
+	run(s, 1.0)
+	check(tw.hp == 0.0, "a destroyed tower cannot be repaired while an enemy is in its light")
+	s.enemies.clear()
+	te.inv.wood = 20
+	run(s, 10.0)
+	check(absf(tw.hp - 90.0) < 0.01, "a destroyed tower is repaired only to 30%% (%.1f)" % tw.hp)
+	te.inter = false
+	var g3 = s._spawn(G.SPITTER, 0, 0.0)
+	g3.pos = tw.pos + Vector2(0, 2 * 32)
+	run(s, 0.2)
+	check(g3.state != 5, "Spitters never attack towers")
+
+	s = new_match()
+	s.action(1, "vote", 0)
+	s.action(2, "vote", 0)
+	run(s, 200, "dusk")
+	var d0: int = s.active[0]
+	check(s.towers[d0] != null and s.towers[d0].pos.distance_to(G.DOOR_POS[d0] + G.DOOR_DIR[d0] * 5 * 32) < 1.0 and not s.free_tower, "an unplaced free tower appears in front of night 1's door at dusk")
+
+	# Bot teammates (demo / solo tests, not in the GDD)
+	s = G.new()
+	s.add_player(1, "Me", 2)
+	s.action(1, "add_bot", 0)
+	s.action(1, "add_bot", 0)
+	var bots: Array = s.players.values().filter(func(p): return p.bot)
+	check(bots.size() == 2 and bots.map(func(p): return p.role) == [1, 0] and s.leader() == 1, "two bots fill the missing roles (Healer, Scout); the person stays leader")
+	s.action(1, "remove_bot", 0)
+	s.action(1, "add_bot", 0)
+	check(s.players.size() == 3, "bots can be removed and added in the lobby")
+	s.action(1, "start", 0)
+	run(s, 60)
+	check(s.players.values().filter(func(p): return p.bot and p.inv.wood + p.inv.stone + p.inv.herb > 0).size() == 2, "bots gather resources by day")
+	check(s.snapshot().need == 1, "only people count for the day-skip vote")
+	s.action(1, "vote", 0)
+	run(s, 400, "night")
+	s.next_wave = INF  # check idle guard positions before introducing enemies explicitly below
+	run(s, 8)
+	var dn: int = s.active[0]
+	var at_post: Array = s.players.values().filter(func(p): return p.bot and not G.inside_base(p.pos) and p.pos.distance_to(G.DOOR_POS[dn]) < 6 * 32)
+	check(at_post.size() == 2, "at night the bots hold the attacked door")
+	var hb = s.players.values().filter(func(p): return p.bot and p.role == 1)[0]
+	var sb = s.players.values().filter(func(p): return p.bot and p.role == 0)[0]
+	s.enemies.clear()
+	var gb = s._spawn(G.GRUNT, dn, 0.0)
+	gb.pos = sb.pos + G.DOOR_DIR[dn] * 2 * 32
+	var ghp: float = gb.hp
+	run(s, 2.0)
+	check(gb.hp < ghp or not s.enemies.has(gb), "a bot fights an enemy near its post")
+	s.enemies.clear()
+	var me = s.players[1]
+	me.pos = hb.pos + Vector2(32, 0)
+	me.hp = 20.0
+	run(s, 1.5)
+	check(me.hp >= 60.0 and hb.flasks < 3, "the Healer bot throws a flask at a hurt teammate")
+	me.state = 1
+	me.bleed = 60.0
+	me.pos = hb.pos + G.DOOR_DIR[dn] * 5 * 32
+	run(s, 14.0)
+	check(me.state == 0, "a bot walks over and revives a downed teammate")
+	s.remove_player(1)
+	check(s.players.is_empty() and s.phase == "lobby", "when the last person leaves the bots go too")
 	print("FAILED %d" % fails if fails else "ALL OK")
 	quit(1 if fails else 0)

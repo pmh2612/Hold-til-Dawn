@@ -1,0 +1,9 @@
+Base props in this folder
+=========================
+lighthouse (the beacon), workbench, tower / tower_wreck (AGT-12), pad (landing pad, FML-13):
+original pixel art for Hold 'til Dawn, drawn by tools/pixel_props.gd (1 px = 1 game px,
+GDD palette, light from the upper left, 1 px dark outline). No third-party asset and no AI
+image generator was used.
+
+AI disclosure: the script was written by an AI coding assistant (Claude) from the team's GDD;
+declare these sprites in GDD Appendix B as AI-made assets. The PNGs can be repainted by hand.

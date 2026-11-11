@@ -1,0 +1,13 @@
+Character sprites in this folder
+================================
+scout, healer, engineer (CHR-01..03), grunt, spitter, wrecker (CHR-05..07):
+original 32x32 pixel art (Wrecker 40x40) for Hold 'til Dawn, following the GDD style guide
+(palette, dark outline, 4 directions with left mirrored, idle 2 frames + walk 4 frames).
+
+Made by tools/pixel_chars.gd: every sprite is written there as a pixel map (one letter per pixel);
+the script adds the outline, the ground shadow and the walk/idle frames, and writes these PNGs.
+No third-party asset and no AI image generator was used.
+
+AI disclosure: the pixel maps and the script were written by an AI coding assistant (Claude)
+from the team's GDD; declare them in GDD Appendix B as AI-made assets. The PNGs are plain
+1x pixel art: the team can repaint them in Aseprite / Piskel and the game uses the edited files.

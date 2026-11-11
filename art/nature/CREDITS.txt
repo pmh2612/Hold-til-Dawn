@@ -1,0 +1,9 @@
+Nature sprites (trees, rocks, bushes, grass, flowers, pebbles)
+
+Source:  Stylized Nature MegaKit [Standard] by Quaternius - https://quaternius.com
+Licence: CC0 1.0 Universal (public domain) - https://creativecommons.org/publicdomain/zero/1.0/
+Changes: the 3D models were rendered to 2D pixel-art PNG sprites from the game's 3/4 camera by
+         tools/bake_nature.gd (32 px per tile, banded colours, hard shadow, 1 px dark outline;
+         scaled, turned, lit from the upper left). The script was written with an AI coding
+         assistant (Claude); declare it in GDD Appendix B.
+AI:      no AI image generation (the models are hand-made by Quaternius).
