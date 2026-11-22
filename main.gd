@@ -101,6 +101,8 @@ var shot_at = 4.0
 var shot_pos
 var clock = 0.0
 var cam = Camera2D.new()
+# effects, ambience, music and the volume sliders (src/audio/sound.gd)
+var sound = Sound.new()
 var tint = CanvasModulate.new()
 var my_light = PointLight2D.new()
 var beacon = PointLight2D.new()
@@ -131,6 +133,8 @@ func _ready() -> void:
 	# a cap on the frame rate (config/display/display.tres): on a 144 Hz screen the game would otherwise draw
 	# flat out all match long and the laptop's fans would follow
 	Engine.max_fps = DisplaySettings.get_current().max_fps
+	add_child(sound)
+	sound.setup(self)
 	self.build_scene()
 	self.build_ui()
 	var args = OS.get_cmdline_user_args()
@@ -369,6 +373,7 @@ func _unhandled_input(input_event) -> void:
 
 # --- hit feedback (derived from snapshot diffs, no extra network) -------
 func on_snap(d) -> void:
+	sound.from_snap(d)
 	var same: bool = d.get("ph") == snap.get("ph") and d.get("k") == snap.get("k")
 	if same and d.ph in ["day", "dusk", "night"]:
 		var seen = {}
@@ -447,6 +452,7 @@ func _process(delta: float) -> void:
 		# dedicated server draws nothing
 		return
 	clock += dt
+	sound.tick(dt)
 	tick_landmark_ground()
 	local_note_t -= dt
 	# Your own character moves every rendered frame (not at the 60 Hz physics rate), so it glides at any
@@ -3923,6 +3929,7 @@ func node_sprite(nd, hsh: int) -> Variant:
 	var was = node_seen.get(pos, 0)
 	if node_seen.has(pos) and amount < was:
 		self.burst_chips(type, pos, 18 if amount <= 0 else 10, 1.0)
+		sound.harvest(type, pos, 2 if amount <= 0 else 1)
 		node_hit_at[pos] = float(clock)
 	node_seen[pos] = amount
 	visible_node_amounts[pos] = amount
@@ -3979,6 +3986,7 @@ func prepare_harvest_feedback() -> void:
 			continue
 		node_hit_at[pos] = float(clock)
 		burst_chips(type, pos, 6 if type == 2 else 8, 0.65)
+		sound.harvest(type, pos, 0)
 
 func node_scale(nd) -> float:
 	return 1.0
@@ -6092,7 +6100,7 @@ func draw_pause(c, vs) -> void:
 	if not paused:
 		return
 	c.draw_rect(Rect2(0, 0, vs.x, vs.y), Color(0, 0, 0, 0.55))
-	var box_: Rect2 = Rect2(vs.x / 2 - 220, vs.y / 2 - 170, 440, 320)
+	var box_: Rect2 = Rect2(vs.x / 2 - 220, vs.y / 2 - 170, 440, 410)
 	self.panel(c, box_)
 	self.text(c, Vector2(box_.position.x, box_.position.y + 34), "PAUSED", 26, GOLD, 1, box_.size.x, true)
 	for i in range(CONTROLS.size()):
@@ -6104,6 +6112,7 @@ func draw_pause(c, vs) -> void:
 		c.draw_rect(b, Color(0.95, 0.71, 0.27, 0.35) if b.has_point(mouse) else Color(1, 1, 1, 0.08))
 		c.draw_rect(b, GOLD, false, 1.5)
 		self.text(c, Vector2(b.position.x, b.position.y + 24), labels[i], 14, Color.WHITE, 1, b.size.x, true)
+	sound.draw_volume(c, vs)
 
 func pause_mouse(ev) -> bool:
 	if not paused or ev.button_index != 1:
@@ -6115,6 +6124,8 @@ func pause_mouse(ev) -> bool:
 		elif self.pause_button(hud.size, 1).has_point(mouse):
 			paused = false
 			self.back_to_menu("Left the match")
+		else:
+			sound.volume_mouse(mouse, hud.size)
 	return true
 
 # Esc closes an open panel first, then toggles the pause overlay.
