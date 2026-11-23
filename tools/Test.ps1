@@ -22,6 +22,7 @@ try {
         }
     }
 
+    Invoke-Suite 'tests/SoundCheck.tscn' 'SOUND ALL OK' 'sound.log'
     Invoke-Suite 'tests/RadioPanelCheck.tscn' 'RADIO PANEL ALL OK' 'radio-panel.log'
     Invoke-Suite 'tests/ChestPatrolCheck.tscn' 'CHEST PATROL ALL OK' 'chest-patrol.log'
     Invoke-Suite 'tests/GameplayRefineCheck.tscn' 'GAMEPLAY REFINE ALL OK' 'gameplay-refine.log'

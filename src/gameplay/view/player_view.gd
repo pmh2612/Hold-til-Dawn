@@ -112,9 +112,7 @@ func char_(key_, skin, foot, aim, s, mod_, lock = null, activity = null, play = 
 	main.anim_state[key_] = timing
 	var phase_time: float = float(main.clock - timing[1])
 	var act_ = Cs.s(activity)
-	if act_ == "repair":
-		foot += Vector2(cos(ang), 0) * sin(phase_time * 12.0) * 2.0
-	elif act_ in ["heal", "revive", "loot"]:
+	if act_ in ["heal", "revive", "loot"]:
 		foot.y += 2.0
 	var fr = main.cinfo.frames[anim]
 	# out of step with each other
@@ -150,21 +148,8 @@ func player_ui(id, p, foot, font) -> void:
 	main.draw_string(font, lp, label, 1, 4 * T, 7, NEON_RED if p[5] != 0 else Color.WHITE)
 
 func draw_activity(foot, aim, activity) -> void:
-	if activity == "repair":
-		var centre = foot - Vector2(0, 15)
-		var angle = aim + sin(main.clock * 12) * 0.8
-		var tip = centre + Vector2.from_angle(angle) * 20
-		var side = Vector2.from_angle(angle).orthogonal() * 5
-		main.draw_line(centre, tip, INK, 5)
-		main.draw_line(centre, tip, Color("AD7C48"), 3)
-		main.draw_line(tip - side, tip + side, INK, 7)
-		main.draw_line(tip - side, tip + side, Color("B9C6CC"), 4)
-		var contact = foot + Vector2.from_angle(aim) * 22 - Vector2(0, 12)
-		var strike: float = maxf(0, sin(main.clock * 12))
-		for i in range(3):
-			var ray = Vector2.from_angle(aim + (i - 1) * 0.8)
-			main.draw_line(contact + ray * 2, contact + ray * (3 + 7 * strike), Color("FFD479"), 1.5)
-	elif activity == "loot":
+	# Repair/build motion and its hammer are already drawn by the character sprite.
+	if activity == "loot":
 		var hand = foot - Vector2(0, 13) + Vector2.from_angle(aim) * 12
 		var turn = Vector2.from_angle(main.clock * 10) * 4
 		main.draw_line(hand - turn, hand + turn, Color("E7D19B"), 2)

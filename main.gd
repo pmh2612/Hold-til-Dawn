@@ -94,6 +94,7 @@ var shot_at = 4.0
 var shot_pos
 var clock = 0.0
 var cam = Camera2D.new()
+var sound = Sound.new()
 var tint = CanvasModulate.new()
 var my_light = PointLight2D.new()
 var beacon = PointLight2D.new()
@@ -148,6 +149,8 @@ func _ready() -> void:
 	# a cap on the frame rate (config/display/display.tres): on a 144 Hz screen the game would otherwise draw
 	# flat out all match long and the laptop's fans would follow
 	Engine.max_fps = DisplaySettings.get_current().max_fps
+	add_child(sound)
+	sound.setup(self)
 	self.build_scene()
 	front_end.build_ui()
 	var args = OS.get_cmdline_user_args()
@@ -280,6 +283,7 @@ func _unhandled_input(input_event) -> void:
 
 # --- hit feedback (derived from snapshot diffs, no extra network) -------
 func on_snap(d) -> void:
+	sound.from_snap(d)
 	var same: bool = d.get("ph") == snap.get("ph") and d.get("k") == snap.get("k")
 	if same and d.ph in ["day", "dusk", "night"]:
 		var seen = {}
@@ -358,6 +362,7 @@ func _process(delta: float) -> void:
 		# dedicated server draws nothing
 		return
 	clock += dt
+	sound.tick(dt)
 	landmark_details.tick_landmark_ground()
 	build_menu.local_note_t -= dt
 	# Your own character moves every rendered frame (not at the 60 Hz physics rate), so it glides at any

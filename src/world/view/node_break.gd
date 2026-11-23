@@ -39,6 +39,7 @@ func node_sprite(nd, hsh: int) -> Variant:
 	var was = node_seen.get(pos, 0)
 	if node_seen.has(pos) and amount < was:
 		self.burst_chips(type, pos, 18 if amount <= 0 else 10, 1.0)
+		main.sound.harvest(type, pos, 2 if amount <= 0 else 1)
 		node_hit_at[pos] = float(main.clock)
 	node_seen[pos] = amount
 	visible_node_amounts[pos] = amount
@@ -95,6 +96,7 @@ func prepare_harvest_feedback() -> void:
 			continue
 		node_hit_at[pos] = float(main.clock)
 		burst_chips(type, pos, 6 if type == 2 else 8, 0.65)
+		main.sound.harvest(type, pos, 0)
 
 func node_scale(nd) -> float:
 	return 1.0
