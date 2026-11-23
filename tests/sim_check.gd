@@ -77,7 +77,8 @@ func check_progression() -> void:
 	self.check(s.count(eng, "arrow") == 5 and s.count(eng, "wood") == 0, "combat ammo crafted at workbench")
 	s.add_item(eng, "light_armour", 1)
 	self.check(eng.armour == 1 and s.count(eng, "light_armour") == 0, "looted armour is worn and takes no bag slot")
-	self.check(GameSim.RECIPES.all(func(r): return GameSim.kind_of(r[3]) == "weapon" or GameSim.kind_of(r[3]) == "ammo"), "only combat weapons and ammo are craftable")
+	# a3f6a63 added armour, healing, kits and chest keys to the workbench; base repairs restore the base, not an item
+	self.check(GameSim.RECIPES.all(func(r): return GameSim.ITEMS.has(r[3]) or r[3] == "base"), "every recipe makes a known item (or repairs the base)")
 	s.set_count(eng, "wood", 8)
 	s.set_count(eng, "stone", 12)
 	s.action(1, "craft", 1)

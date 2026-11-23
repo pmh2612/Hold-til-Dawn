@@ -153,7 +153,9 @@ func generate() -> void:
 				continue
 			var resource_type: int = Harvestables.type_of(sprite)
 			if resource_type >= 0:
-				harvest_sites.append(Harvestables.Site.new(Vector2(child.position), sprite, resource_type, float(child.solid_radius * absf(child.scale.x))))
+				var site = Harvestables.Site.new(Vector2(child.position), sprite, resource_type, float(child.solid_radius * absf(child.scale.x)))
+				harvest_sites.append(site)
+				Cs.set_add(hand_placed, site)
 				continue
 			deco.append([child.position, child.texture.resource_path.get_file().get_basename(), child.scale.x, child.modulate])
 			if child.solid_radius > 0:
@@ -1342,6 +1344,9 @@ func ensure_home_farm_resources(primary_count: int = 0) -> void:
 var outside_before = Cs.arr(3, 0)
 # Per material and region: exactly three quarters remain (rounding at most one node per group).
 var outside_after = Cs.arr(3, 0)
+# Sites placed by hand in maps/island.tscn: the thinning never removes them, so what a designer puts in the
+# editor stays in the game.
+var hand_placed = {}
 
 func thin_outside_resources() -> void:
 	Cs.array_clear(outside_before)
@@ -1364,9 +1369,12 @@ func thin_outside_resources() -> void:
 		var drop: int = int(Cs.round_even(group.size() * 0.25))
 		# Spatial hashing distributes removals across the world instead of deleting one contiguous patch.
 		Cs.sort_cmp(group, func(a, b): return Cs.compare(resource_order(a.pos), resource_order(b.pos)))
+		var dropped: int = 0
 		for i in range(drop):
-			Cs.set_add(remove, group[i])
-		outside_after[key[0]] += group.size() - drop
+			if not hand_placed.has(group[i]):
+				Cs.set_add(remove, group[i])
+				dropped += 1
+		outside_after[key[0]] += group.size() - dropped
 	Cs.remove_all(harvest_sites, func(s): return remove.has(s))
 	var flat = []
 	var outside: int = 0
