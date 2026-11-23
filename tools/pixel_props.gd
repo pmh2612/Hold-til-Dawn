@@ -26,7 +26,7 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(out)
 	self.save(out, "lighthouse", self.lighthouse(), Vector2(14, 73 + LH_EXTRA))
 	self.save(out, "workbench", self.workbench(), Vector2(31, 45))
-	# the shared storage chest: 4 frames side by side, shut to wide open (src/world/view/Main.BaseProps.cs)
+	# the shared storage chest: 4 frames side by side, shut to wide open (src/world/view/base_props.gd)
 	self.save(out, "chest", self.chest_sheet(), Vector2(18, 35))
 	self.save(out, "tower", self.tower(false), Vector2(13, 57 + TOWER_EXTRA))
 	self.save(out, "tower_wreck", self.tower(true), Vector2(13, 57 + TOWER_EXTRA))

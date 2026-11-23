@@ -15,13 +15,13 @@ func _ready() -> void:
 		sim.nodes.append({"type": type, "pos": Vector2(900 + type * 100, 900), "amount": 5})
 	on_snap(sim.snapshot())
 	for type in range(4):
-		if gather_animation(Vector2(900 + type * 100, 900)) != expected[type]:
+		if harvest_view.gather_animation(Vector2(900 + type * 100, 900)) != expected[type]:
 			Cs.fail("Wrong resource animation")
 			return
 	# A new world at the same node count must replace the cached resource classification too.
 	sim.nodes[0]["type"] = 2
 	on_snap(sim.snapshot())
-	if gather_animation(Vector2(900, 900)) != "gather_herb":
+	if harvest_view.gather_animation(Vector2(900, 900)) != "gather_herb":
 		Cs.fail("Stale resource animation cache")
 		return
 	sim.nodes[0]["type"] = 0
@@ -91,7 +91,7 @@ func _draw() -> void:
 			p[11] = false
 			p[22] = "gather"
 			p[23] = target
-			draw_player(key, p, foot)
+			player_view.draw_player(key, p, foot)
 			draw_string(font, foot + Vector2(-85, 32), "%s / %s" % [skins[role], Cs.s(GameSim.RES[type])], 16)
 			if Cs.s(anim_state[key][0]) != expected[type]:
 				Cs.fail("Renderer did not choose harvesting sprite")

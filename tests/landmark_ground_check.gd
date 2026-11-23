@@ -67,7 +67,7 @@ func _ready() -> void:
 			if not IslandMap.on_land(p) or IslandMap.in_river(p, IslandMap.RIVER_BANK + 3):
 				x += 4
 				continue
-			if WorldGeometry.soil_coverage(cave, p - w.soil_centre(cave)) != 1 or not cave_mask.can_paint(p, 3, true, false):
+			if WorldLandmarkDetails.soil_coverage(cave, p - w.soil_centre(cave)) != 1 or not cave_mask.can_paint(p, 3, true, false):
 				Cs.fail("Uncovered cave ground at %s" % [Cs.s(p)])
 				return
 			cave_cells += 1
@@ -146,7 +146,7 @@ func _ready() -> void:
 		Cs.fail("The east-to-west cave entrance or mining aisle is blocked at %s, goal %s" % [Cs.s(walker / 32), Cs.s(goal / 32)])
 		return
 	print("CAVE GROUND ALL OK: %s opaque rock cells; east-to-west access is clear" % [cave_cells])
-	if not cave.bare or WorldGeometry.soil_coverage(cave, Vector2.ZERO) != 1 or WorldGeometry.soil_coverage(cave, Vector2(0, 2 * 32)) != 1:
+	if not cave.bare or WorldLandmarkDetails.soil_coverage(cave, Vector2.ZERO) != 1 or WorldLandmarkDetails.soil_coverage(cave, Vector2(0, 2 * 32)) != 1:
 		Cs.fail("Cave mouth and forecourt must have opaque rock ground")
 		return
 	for soil in WorldGeometry.landmark_soils:
@@ -186,7 +186,7 @@ static func check_expedition_sites(w) -> void:
 				if not IslandMap.on_land(p, 10) or IslandMap.in_river(p, IslandMap.RIVER_BANK + 8):
 					Cs.fail("Site %s footprint extends into water at %s" % [id, Cs.s(p / 32)])
 					return
-				if WorldGeometry.soil_coverage(soil, p - site.centre) < 0.99:
+				if WorldLandmarkDetails.soil_coverage(soil, p - site.centre) < 0.99:
 					Cs.fail("Site %s ground does not cover its complete footprint at %s" % [id, Cs.s(p / 32)])
 					return
 				x += 16
@@ -288,7 +288,7 @@ static func check_lookouts(w) -> void:
 				if (d / site.radii).length() > 1:
 					x += 8
 					continue
-				if not IslandMap.on_land(p, 12) or WorldGeometry.soil_coverage(soil, d) < 0.999:
+				if not IslandMap.on_land(p, 12) or WorldLandmarkDetails.soil_coverage(soil, d) < 0.999:
 					Cs.fail("Lookout %s has uncovered or wet ground at %s" % [id, Cs.s(p / 32)])
 					return
 				x += 8
@@ -296,7 +296,7 @@ static func check_lookouts(w) -> void:
 		for placement in w.lookout_placements.filter(func(p): return p[0] == id):
 			for side in [Vector2.ZERO, Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN]:
 				var p: Vector2 = placement[1] + side * placement[2]
-				if not IslandMap.on_land(p, 10) or WorldGeometry.soil_coverage(soil, p - site.centre) < 0.999:
+				if not IslandMap.on_land(p, 10) or WorldLandmarkDetails.soil_coverage(soil, p - site.centre) < 0.999:
 					Cs.fail("Lookout %s fixture extends off its ground at %s" % [id, Cs.s(p / 32)])
 					return
 		for radius in [10.0, 35.0]:
@@ -326,7 +326,7 @@ static func check_lookouts(w) -> void:
 			return
 	for p in w.cape_scarp_face + w.cape_scarp_cap:
 		var soil = Cs.first_or_default(WorldGeometry.landmark_soils, func(s): return s.id == 17)
-		if not IslandMap.on_land(p, 8) or WorldGeometry.soil_coverage(soil, p - w.lm_at[17]) < 0.999:
+		if not IslandMap.on_land(p, 8) or WorldLandmarkDetails.soil_coverage(soil, p - w.lm_at[17]) < 0.999:
 			Cs.fail("The cape scarp is not covered by slate ground")
 			return
 	if len(Geometry2D.triangulate_polygon(w.cape_scarp_face)) == 0 or len(Geometry2D.triangulate_polygon(w.cape_scarp_cap)) == 0:

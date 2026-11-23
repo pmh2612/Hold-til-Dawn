@@ -1,0 +1,132 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://ui/menu/result_screen.gd" id="1_script"]
+
+[sub_resource type="StyleBoxFlat" id="box"]
+bg_color = Color(0.06, 0.07, 0.1, 0.86)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85098, 0.662745, 0.290196, 0.7)
+expand_margin_left = 1.0
+expand_margin_top = 1.0
+expand_margin_right = 1.0
+expand_margin_bottom = 1.0
+
+[sub_resource type="StyleBoxFlat" id="button"]
+bg_color = Color(1, 1, 1, 0.08)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85098, 0.662745, 0.290196, 1)
+expand_margin_left = 1.0
+expand_margin_top = 1.0
+expand_margin_right = 1.0
+expand_margin_bottom = 1.0
+
+[sub_resource type="StyleBoxFlat" id="button_hover"]
+bg_color = Color(0.95, 0.71, 0.27, 0.35)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.85098, 0.662745, 0.290196, 1)
+expand_margin_left = 1.0
+expand_margin_top = 1.0
+expand_margin_right = 1.0
+expand_margin_bottom = 1.0
+
+[sub_resource type="StyleBoxEmpty" id="no_focus"]
+
+[node name="ResultScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_script")
+
+[node name="Dim" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.6)
+
+[node name="Box" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -300.0
+offset_top = -200.0
+offset_right = 300.0
+offset_bottom = 210.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("box")
+
+[node name="Title" type="Label" parent="Box"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_top = 2.0
+offset_right = 600.0
+offset_bottom = 52.0
+theme_override_font_sizes/font_size = 37
+text = "MISSION COMPLETE"
+horizontal_alignment = 1
+
+[node name="Cause" type="Label" parent="Box"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_top = 57.0
+offset_right = 600.0
+offset_bottom = 81.0
+theme_override_font_sizes/font_size = 14
+text = "Generator destroyed at door B"
+horizontal_alignment = 1
+
+[node name="Night" type="Label" parent="Box"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_top = 79.0
+offset_right = 600.0
+offset_bottom = 99.0
+theme_override_colors/font_color = Color(1, 1, 1, 0.7)
+theme_override_font_sizes/font_size = 12
+text = "Night reached: 1 / 5"
+horizontal_alignment = 1
+
+[node name="Table" type="Control" parent="Box"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 24.0
+offset_top = 110.0
+offset_right = 576.0
+offset_bottom = 340.0
+mouse_filter = 2
+
+[node name="Back" type="Button" parent="Box"]
+unique_name_in_owner = true
+layout_mode = 0
+offset_left = 190.0
+offset_top = 350.0
+offset_right = 410.0
+offset_bottom = 388.0
+focus_mode = 0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_colors/font_hover_color = Color(1, 1, 1, 1)
+theme_override_colors/font_pressed_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 16
+theme_override_styles/focus = SubResource("no_focus")
+theme_override_styles/normal = SubResource("button")
+theme_override_styles/hover = SubResource("button_hover")
+theme_override_styles/pressed = SubResource("button_hover")
+text = "BACK TO LOBBY"

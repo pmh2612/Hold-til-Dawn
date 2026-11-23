@@ -118,7 +118,7 @@ static func think(sim, p, slot, dt) -> void:
 	elif sim.phase == "day":
 		var spot: Vector2 = Vector2(BENCH_SPOTS[slot % BENCH_SPOTS.size()] * T)
 		move(sim, p, spot, dt)
-		if GameSim.inside_base(p.pos):
+		if SimWorld.inside_base(p.pos):
 			craft(sim, p)
 	else:
 		if p.pos.distance_to(post_) > 0.3 * T:
@@ -165,7 +165,7 @@ static func foe(sim, p, post_) -> Variant:
 		if day:
 			ok = d <= SIGHT_DAY or e.get("target", 0) == p.id
 		else:
-			ok = d <= 2.5 * T or e.pos.distance_to(post_) <= LEASH or GameSim.inside_base(e.pos)
+			ok = d <= 2.5 * T or e.pos.distance_to(post_) <= LEASH or SimWorld.inside_base(e.pos)
 		if ok and d < best_d and sim.line_clear(p.pos, e.pos):
 			best_d = d
 			best = e
@@ -268,7 +268,7 @@ static func equip(sim, p) -> void:
 				return
 	for i in GameSim.HOTBAR:
 		var s = p.inv[i]
-		if s == null or GameSim.kind_of(s[0]) != "weapon":
+		if s == null or SimInventory.kind_of(s[0]) != "weapon":
 			p.sel = i
 			return
 
@@ -288,14 +288,14 @@ static func move(sim, p, goal, dt) -> void:
 	p.pos = sim.move_actor(p.pos, p.pos + step.normalized() * minf(spd * dt, step.length()), 0.3 * T)
 	p.aim = step.angle()
 	var night: bool = sim.phase == "night"
-	p.pos = GameSim.collide(p.pos, BODY, sim.doors.map(func(d): return not night or d <= 0))
+	p.pos = SimWorld.collide(p.pos, BODY, sim.doors.map(func(d): return not night or d <= 0))
 	if night and not p.inside and not sim.doors.any(func(d): return d <= 0):
-		p.pos = GameSim.push_out(p.pos, BODY)
+		p.pos = SimWorld.push_out(p.pos, BODY)
 
 static func waypoint(sim, from, to) -> Variant:
 	# Around the base outside, through a door to get in or out.
-	var ain = GameSim.inside_base(from)
-	var bin = GameSim.inside_base(to)
+	var ain = SimWorld.inside_base(from)
+	var bin = SimWorld.inside_base(to)
 	if ain and bin:
 		return to
 	var night: bool = sim.phase == "night"
@@ -314,11 +314,11 @@ static func waypoint(sim, from, to) -> Variant:
 			var outer: Vector2 = Vector2(GameSim.DOOR_POS[best] + GameSim.DOOR_DIR[best] * T)
 			if gap or from.distance_to(outer) < 0.3 * T:
 				return GameSim.DOOR_POS[best] - GameSim.DOOR_DIR[best] * T
-			if not GameSim.inside_base(from, BODY + 2):
-				return GameSim.route(from, outer, BODY)
-		if GameSim.inside_base(from, BODY + 2):
-			return GameSim.push_out(from, BODY + 4)
-		return GameSim.route(from, to, BODY)
+			if not SimWorld.inside_base(from, BODY + 2):
+				return SimWorld.route(from, outer, BODY)
+		if SimWorld.inside_base(from, BODY + 2):
+			return SimWorld.push_out(from, BODY + 4)
+		return SimWorld.route(from, to, BODY)
 	if best < 0:
 		return from
 	var inner: Vector2 = Vector2(GameSim.DOOR_POS[best] - GameSim.DOOR_DIR[best] * T)
@@ -335,10 +335,11 @@ static func fetch_rescue_by_day(sim, p, dt) -> bool:
 		var match_ = sim
 		if match_.radio_builder != null and match_.radio_builder != int(p.id):
 			return false
-		if not sim.at_bench(p):
-			move(sim, p, GameSim.WORKBENCH_POS + Vector2(0, 24), dt)
+		if not SimSupplies.at_radio(sim, p):
+			move(sim, p, GameSim.RADIO_POS + Vector2(0, 24), dt)
 		else:
-			p.inter = true
+			sim.action(p.id, "radio_open", null)
+			sim.action(p.id, "radio_repair", null)
 		return true
 	if sim.radio_built or p.role != 0:
 		return false

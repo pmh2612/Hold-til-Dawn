@@ -42,15 +42,15 @@ func _ready() -> void:
 	snap = sim.snapshot()
 	craft_open = true
 	for t in range(3):
-		select_craft_tier(t)
-		var cards = craft_choices()
+		craft_panel.select_craft_tier(t)
+		var cards = craft_panel.craft_choices()
 		for i in cards:
-			var a: Rect2 = craft_card(Vector2(960, 540), i)
+			var a: Rect2 = craft_panel.craft_card(Vector2(960, 540), i)
 			if a.end.x > craft_detail_right_edge():
 				Cs.fail("Card exceeds recipe column")
 				return
 			for j in cards:
-				if i != j and a.intersects(craft_card(Vector2(960, 540), j)):
+				if i != j and a.intersects(craft_panel.craft_card(Vector2(960, 540), j)):
 					Cs.fail("Overlapping recipe cards")
 					return
 	DirAccess.make_dir_recursive_absolute("res://.tmp/tactical-craft")
@@ -61,7 +61,7 @@ func _ready() -> void:
 	# catch (Exception E) dropped
 
 func craft_detail_right_edge() -> float:
-	return craft_panel_rect(Vector2(960, 540)).position.x + 20 + craft_panel_rect(Vector2(960, 540)).size.x * 0.54
+	return craft_panel.craft_panel_rect(Vector2(960, 540)).position.x + 20 + craft_panel.craft_panel_rect(Vector2(960, 540)).size.x * 0.54
 
 func _physics_process(delta: float) -> void:
 	pass
@@ -72,8 +72,8 @@ func _process(delta: float) -> void:
 	var review_hud = hud
 	review_hud.visible = stage < 3
 	if stage < 3:
-		select_craft_tier(stage)
-		craft_sel = selected[stage]
+		craft_panel.select_craft_tier(stage)
+		craft_panel.craft_sel = selected[stage]
 		review_hud.queue_redraw()
 	queue_redraw()
 
@@ -88,20 +88,20 @@ func _draw() -> void:
 		pass
 	else:
 		snap.tactical = [["poison", Vector2(240, 270), 3.0], ["heal", Vector2(480, 270), 3.0], ["trap", Vector2(680, 270), 100.0], ["blast", Vector2(800, 270), 0.25]]
-		draw_tactical_areas()
+		tactical_items.draw_tactical_areas()
 		draw_string(ThemeDB.fallback_font, Vector2(36, 40), "EXPEDITION LOOT / support gear and world effects", 20)
 		for i in range(GameSim.CHEST_SUPPORT.size()):
 			var id = GameSim.CHEST_SUPPORT[i]
 			var pos: Vector2 = Vector2(40 + i * 84, 440)
-			draw_item_icon(self, id, pos, 3.0)
+			inventory.draw_item_icon(self, id, pos, 3.0)
 			draw_string(ThemeDB.fallback_font, pos + Vector2(-42, 52), id.replace("_", " "), 10)
 		var p = snap.ps[1]
 		p[8] = "long_spear"
 		p[11] = true
 		p[12] = 0.0
-		draw_player(2, p, Vector2(140, 150))
+		player_view.draw_player(2, p, Vector2(140, 150))
 		p[8] = "stun_maul"
-		draw_player(3, p, Vector2(380, 150))
+		player_view.draw_player(3, p, Vector2(380, 150))
 	warm_frames += 1
 	if warm_frames < 12:
 		return

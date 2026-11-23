@@ -88,7 +88,7 @@ func check_progression() -> void:
 	self.run(s, 0.1)
 	self.check(s.phase == "dusk", "day -> dusk")
 	self.run(s, 16, "night")
-	self.check(s.phase == "night" and not GameSim.inside_base(eng.pos), "night starts, players moved outside")
+	self.check(s.phase == "night" and not SimWorld.inside_base(eng.pos), "night starts, players moved outside")
 	# An undefended base loses: isolate door/generator rules from the free automatic tower,
 	# which can now hold the deliberately sparse first-night waves on its own.
 	s.towers = [null, null, null]
@@ -141,7 +141,7 @@ func check_mechanics() -> void:
 	e1.ent = true
 	self.run(s, 2.1)
 	e1.ent = false
-	self.check(e1.inside and GameSim.inside_base(e1.pos), "Engineer holds F 2 s at a closed door and gets inside")
+	self.check(e1.inside and SimWorld.inside_base(e1.pos), "Engineer holds F 2 s at a closed door and gets inside")
 	# walks over to the workbench by the north wall
 	e1.pos = GameSim.WORKBENCH_POS + Vector2(0, 24)
 	s.set_count(e1, "wood", 1)
@@ -151,13 +151,13 @@ func check_mechanics() -> void:
 	sc2.pos = GameSim.DOOR_POS[1] + GameSim.DOOR_DIR[1] * 32
 	sc2.ent = true
 	self.run(s, 2.1)
-	self.check(not sc2.inside and not GameSim.inside_base(sc2.pos), "Scout cannot enter at night")
+	self.check(not sc2.inside and not SimWorld.inside_base(sc2.pos), "Scout cannot enter at night")
 	# back to door A, just inside
 	e1.pos = GameSim.DOOR_POS[0] - GameSim.DOOR_DIR[0] * 1.2 * 32
 	e1.ent = true
 	self.run(s, 2.1)
 	e1.ent = false
-	self.check(not e1.inside and not GameSim.inside_base(e1.pos), "Engineer leaves the same way")
+	self.check(not e1.inside and not SimWorld.inside_base(e1.pos), "Engineer leaves the same way")
 	# Engineer repairs a door at night from outside (MEC-12, FML-08)
 	e1.pos = GameSim.DOOR_POS[0] + GameSim.DOOR_DIR[0] * 24
 	s.doors[0] = 300.0
@@ -179,18 +179,21 @@ func check_mechanics() -> void:
 	var ep = Vector2(0, 30 * 32)
 	var goal: Vector2 = Vector2(GameSim.DOOR_POS[0] + GameSim.DOOR_DIR[0] * 22)
 	for i in 2000:
-		ep += (GameSim.route(ep, goal, 16.0) - ep).normalized() * 3.0
-		ep = GameSim.push_out(ep, 16.0)
+		ep += (SimWorld.route(ep, goal, 16.0) - ep).normalized() * 3.0
+		ep = SimWorld.push_out(ep, 16.0)
 		if ep.distance_to(goal) < 4:
 			break
 	self.check(ep.distance_to(goal) < 4, "enemy spawned behind the base walks around to door A")
 	# Daytime roamers (MEC-26, FML-16)
 	# points straight south of the base: wall distance = y - HALF.y
 	var wall: float = float(GameSim.HALF.y)
-	self.check(GameSim.roam_chance(Vector2(0, wall + 9 * 32)) == 0.0, "no roamer chance inside 10 tiles")
-	self.check(absf(GameSim.roam_chance(Vector2(0, wall + 40 * 32)) - 0.65 * 30 / 35) < 0.001, "roamer chance scales toward 65% at 45 tiles")
-	self.check(absf(GameSim.roam_chance(Vector2(0, wall + 65 * 32)) - 0.65) < 0.001, "roamer chance capped at 65%")
+	self.check(SimRoamers.roam_chance(Vector2(0, wall + 9 * 32)) == 0.0, "no roamer chance inside 10 tiles")
+	self.check(absf(SimRoamers.roam_chance(Vector2(0, wall + 40 * 32)) - 0.65 * 30 / 35) < 0.001, "roamer chance scales toward 65% at 45 tiles")
+	self.check(absf(SimRoamers.roam_chance(Vector2(0, wall + 65 * 32)) - 0.65) < 0.001, "roamer chance capped at 65%")
 	s = self.new_match()
+	# Test ambient roaming separately from the intentional encounters at unopened chests.
+	for chest in s.exploration_chests:
+		chest.opened = true
 	var far = s.players[2]
 	var near = s.players[1]
 	far.pos = Vector2(0, wall + 55 * 32)
@@ -254,7 +257,7 @@ func check_mechanics() -> void:
 	var walk = func(start, step, open):
 		var pos = start
 		for i in 200:
-			pos = GameSim.collide(pos + step, 12.8, open)
+			pos = SimWorld.collide(pos + step, 12.8, open)
 		return pos
 	self.check(walk.call(Vector2(0, GameSim.HALF.y + 40), Vector2(0, -2), [true, true, true]).y > GameSim.HALF.y, "bottom wall blocks (no door)")
 	self.check(walk.call(Vector2(0, -GameSim.HALF.y - 40), Vector2(0, 2), [true, true, true]).y > 0, "open door B (north) lets you in")
@@ -286,9 +289,9 @@ func check_mechanics() -> void:
 	var south = func(e): return absf(e.pos.x) < GameSim.HALF.x and e.pos.y > GameSim.HALF.y
 	self.check(not s.enemies.is_empty(), "night wave spawns enemies")
 	if GameSim.SPAWN_ALL_SIDES:
-		self.check(s.enemies.all(func(e): return IslandMap.on_land(Vector2(e.pos)) and GameSim.wall_dist(e.pos) >= 8 * GameSim.T), "wave spawns stay on the island and outside the base")
+		self.check(s.enemies.all(func(e): return IslandMap.on_land(Vector2(e.pos)) and SimWorld.wall_dist(e.pos) >= 8 * GameSim.T), "wave spawns stay on the island and outside the base")
 		self.check(s.enemies.any(func(e): return e.pos.x < -GameSim.HALF.x) and s.enemies.any(func(e): return e.pos.x > GameSim.HALF.x) and s.enemies.any(func(e): return e.pos.y < -GameSim.HALF.y) and s.enemies.any(func(e): return e.pos.y > GameSim.HALF.y), "night wave comes from west, east, north and south")
-		self.check(s.enemies.any(func(e): return GameSim.wall_dist(e.pos) < 20 * GameSim.T) and s.enemies.any(func(e): return GameSim.wall_dist(e.pos) > 45 * GameSim.T), "night wave spreads from near the base to the outer island")
+		self.check(s.enemies.any(func(e): return SimWorld.wall_dist(e.pos) < 20 * GameSim.T) and s.enemies.any(func(e): return SimWorld.wall_dist(e.pos) > 45 * GameSim.T), "night wave spreads from near the base to the outer island")
 		self.check(s.enemies.all(func(e): return e.door == s.nearest_active_door(e.pos)), "each enemy heads for its nearest attacked door")
 	else:
 		self.check(s.enemies.all(in_band), "night spawns in a 10 x 10 tile band 25-35 tiles in front of each active door")
@@ -296,15 +299,15 @@ func check_mechanics() -> void:
 	s.nodes = kept_nodes
 	# island map (src/world/IslandMap.cs): most wood, stone and herbs round the three clusters in the safe zone,
 	# a few at outer landmarks; all titanium past it; every node on land, off the door corridors
-	self.check(s.nodes.all(func(n): return not GameSim.in_door_lane(n.pos) and IslandMap.on_land(Vector2(n.pos)) and (n.type < 3 or GameSim.wall_dist(n.pos) > 20 * 32)), "resource nodes on land, titanium beyond the safe zone, door corridors clear")
+	self.check(s.nodes.all(func(n): return not SimWorld.in_door_lane(n.pos) and IslandMap.on_land(Vector2(n.pos)) and (n.type < 3 or SimWorld.wall_dist(n.pos) > 20 * 32)), "resource nodes on land, titanium beyond the safe zone, door corridors clear")
 	var basic: int = 0
 	var in_safe: int = 0
 	for n in s.nodes:
 		if n.type < 3 and not n.get("ambient", false):
 			basic += 1
-			in_safe += 1 if GameSim.wall_dist(n.pos) <= 20 * 32 else 0
+			in_safe += 1 if SimWorld.wall_dist(n.pos) <= 20 * 32 else 0
 	self.check(in_safe >= 0.7 * basic, "most primary resource clusters remain in the safe zone")
-	# the landmarks (src/world/WorldLandmarks.cs): all 17 built, the pier walkable out over the sea, and
+	# the landmarks (src/world/world_landmarks.gd): all 17 built, the pier walkable out over the sea, and
 	# titanium still at every salvage site
 	var wld = s.world
 	self.check(wld.lm_at.keys().filter(func(id): return id != 1).size() == 17, "all 17 landmarks outside the outpost are built")
@@ -368,11 +371,11 @@ func check_mechanics() -> void:
 	s.action(1, "tower", 0)
 	s.tick_tower_construction(s.players[1], 6.1)
 	self.check(s.towers[0] == null and s.free_tower, "no tower right at a door")
-	te.pos = GameSim.pad_pos(0)
+	te.pos = SimWorld.pad_pos(0)
 	s.action(1, "tower", 0)
 	s.tick_tower_construction(s.players[1], 6.1)
 	self.check(s.towers[0] == null and s.free_tower, "no tower on a landing pad")
-	self.check(GameSim.tower_spot_problem(Vector2.ZERO, null) != "" and GameSim.tower_spot_problem(s.free_tower_spot(1), s.world) == "", "towers go outside the base, anywhere off the pads")
+	self.check(SimTowers.tower_spot_problem(Vector2.ZERO, null) != "" and SimTowers.tower_spot_problem(s.free_tower_spot(1), s.world) == "", "towers go outside the base, anywhere off the pads")
 	ts.pos = s.free_tower_spot(0)
 	s.action(2, "tower", 0)
 	self.check(s.towers[0] == null, "only an Engineer builds towers")
@@ -473,9 +476,7 @@ func check_mechanics() -> void:
 	self.run(s, 1.1, "dusk")
 	self.check(s.phase == "dusk", "the vote skips the day once 180 s have passed")
 	self.check(absf(s.t - 15.0) < 0.05, "dusk warning lasts 15 s (BAL-05)")
-	var d0: int = int(s.active[0])
-	var ft = s.towers[0]
-	self.check(ft != null and ft.pos.distance_to(GameSim.pad_pos(d0)) < 12 * 32 and ft.pos.distance_to(GameSim.pad_pos(d0)) > GameSim.PAD_R + GameSim.TOWER_R * 32 and not s.free_tower, "an unplaced free tower appears beside night 1's landing pad at dusk, not on it")
+	self.check(s.towers.all(func(tw): return tw == null) and s.free_tower, "dusk preserves the free tower for manual placement")
 
 # ---- tests/ai/SimCheck.Bosses.cs
 # Owner: Vu Duc Viet Anh. Boss archetype and threat checks (AGT-05..11, table 4.2, FML-05, FML-09).
@@ -673,11 +674,11 @@ func check_bots() -> void:
 	s.next_wave = INF
 	self.run(s, 8)
 	var dn: int = int(s.active[0])
-	var at_post = s.players.values().filter(func(p): return p.bot and not GameSim.inside_base(p.pos) and p.pos.distance_to(GameSim.DOOR_POS[dn]) < 6 * 32)
+	var at_post = s.players.values().filter(func(p): return p.bot and not SimWorld.inside_base(p.pos) and p.pos.distance_to(GameSim.DOOR_POS[dn]) < 6 * 32)
 	self.check(at_post.any(func(p): return p.role == 1), "at night the Healer bot holds the attacked door")
 	# Both bots defend at night; objectives are collected only during the day.
 	self.run(s, 40)
-	at_post = s.players.values().filter(func(p): return p.bot and not GameSim.inside_base(p.pos) and p.pos.distance_to(GameSim.DOOR_POS[dn]) < 6 * 32)
+	at_post = s.players.values().filter(func(p): return p.bot and not SimWorld.inside_base(p.pos) and p.pos.distance_to(GameSim.DOOR_POS[dn]) < 6 * 32)
 	self.check(at_post.size() == 2, "both bots return to guard the door without a night fetch quest")
 	var hb = s.players.values().filter(func(p): return p.bot and p.role == 1)[0]
 	var sb = s.players.values().filter(func(p): return p.bot and p.role == 0)[0]
@@ -738,13 +739,13 @@ func check_items() -> void:
 	eng.pos = GameSim.STORAGE_POS + Vector2(0, 24)
 	var wood_slot: int = eng.inv.map(func(x): return x[0] if x != null else "").find("wood")
 	s.action(1, "move_item", ["inv", wood_slot, "sto", 0])
-	self.check(s.count(eng, "wood") == 0 and GameSim.count_in(s.storage, "wood") == 20, "wood moved into base storage at the chest")
+	self.check(s.count(eng, "wood") == 0 and SimInventory.count_in(s.storage, "wood") == 20, "wood moved into base storage at the chest")
 	eng.pos = Vector2(0, 15 * 32)
 	s.action(1, "move_item", ["sto", 0, "inv", 5])
-	self.check(GameSim.count_in(s.storage, "wood") == 20, "storage cannot be reached from outside the base")
+	self.check(SimInventory.count_in(s.storage, "wood") == 20, "storage cannot be reached from outside the base")
 	eng.pos = GameSim.WORKBENCH_POS + Vector2(0, 24)
 	s.action(1, "move_item", ["sto", 0, "inv", 5])
-	self.check(GameSim.count_in(s.storage, "wood") == 20, "nor from elsewhere in the base (the workbench is not the chest)")
+	self.check(SimInventory.count_in(s.storage, "wood") == 20, "nor from elsewhere in the base (the workbench is not the chest)")
 	eng.pos = GameSim.STORAGE_POS + Vector2(0, 24)
 	s.action(1, "move_item", ["sto", 0, "inv", 5])
 	self.check(s.count(eng, "wood") == 20 and eng.inv[5][0] == "wood", "and taken back into a chosen slot")
@@ -796,8 +797,8 @@ func check_items() -> void:
 	self.check(s.count(eng, "arrow") == 5 and s.count(eng, "wood") == 1, "5 arrows cost 1 wood separately")
 	s.action(1, "craft", 0)
 	self.run(s, 3.1)
-	var the_bow = eng.inv.filter(func(x): return GameSim.is_bow(x))[0]
-	self.check(GameSim.loaded(the_bow) == 10 and not eng.inv.any(func(x): return x != null and x[0] == "arrow"), "the bow holds its arrows: all 10 loaded, no slot spent on arrows")
+	var the_bow = eng.inv.filter(func(x): return SimInventory.is_bow(x))[0]
+	self.check(SimInventory.loaded(the_bow) == 10 and not eng.inv.any(func(x): return x != null and x[0] == "arrow"), "the bow holds its arrows: all 10 loaded, no slot spent on arrows")
 	s.nodes.clear()
 	s.world.rebuild(s.nodes, s.towers)
 	eng.pos = Vector2(0, 15 * 32)
@@ -837,14 +838,14 @@ func check_items() -> void:
 	eng.inv[q2] = ["arrow", 20]
 	s.action(1, "move_item", ["inv", q1, "inv", 2])
 	s.action(1, "move_item", ["inv", q2, "inv", 2])
-	self.check(GameSim.loaded(eng.inv[2]) == 30 and eng.inv[q1] == null and int(eng.inv[q2][1]) == 10, "arrows dragged onto the bow load it up to 30, the rest stays in its slot")
+	self.check(SimInventory.loaded(eng.inv[2]) == 30 and eng.inv[q1] == null and int(eng.inv[q2][1]) == 10, "arrows dragged onto the bow load it up to 30, the rest stays in its slot")
 	# a dropped bow drops its arrows beside it; picked up again they go back in
 	s.action(1, "give", null)
 	self.check(s.count(eng, "bow") == 0 and s.count(eng, "arrow") == 10 and s.drops.any(func(d): return d.item == "arrow" and d.n == 30), "dropping the bow drops its 30 arrows with it")
 	s.pick_up(eng)
 	s.pick_up(eng)
-	var again = eng.inv.filter(func(x): return GameSim.is_bow(x))[0]
-	self.check(again != null and GameSim.loaded(again) == 30 and s.count(eng, "arrow") == 40, "picked up again, the bow is refilled from the bag first and the rest stays loose")
+	var again = eng.inv.filter(func(x): return SimInventory.is_bow(x))[0]
+	self.check(again != null and SimInventory.loaded(again) == 30 and s.count(eng, "arrow") == 40, "picked up again, the bow is refilled from the bag first and the rest stays loose")
 	s.set_count(eng, "arrow", 0)
 	sc.pos = target.pos - Vector2(7.5 * 32, 0)
 	s.action(2, "select", 0)
@@ -854,38 +855,12 @@ func check_items() -> void:
 	sc.atk = false
 	self.run(s, 1.0)
 	self.check(target.hp == 76.0, "the Scout's starter bow needs no arrows and hits like the crafted bow (12 damage, 8 tiles; hp %.1f)" % [target.hp])
-	# Walls (MEC-11, BAL-27)
-	s.enemies.clear()
-	var door: Vector2 = Vector2(GameSim.DOOR_POS[0])
-	var dir: Vector2 = Vector2(GameSim.DOOR_DIR[0])
-	eng.pos = door + dir * 4 * 32
+	# Wall construction was removed; malformed / old requests cannot spend resources.
 	s.set_count(eng, "wood", 10)
-	s.action(1, "build", ["wood", door + dir * 2 * 32, true])
-	self.check(s.built_walls.size() == 0 and s.count(eng, "wood") == 10, "no wall within 3 tiles of a door")
-	var spot: Vector2 = GameSim.snap_to_tile(door + dir * 6 * 32)
-	s.action(1, "build", ["wood", spot, true])
-	self.check(s.built_walls.size() == 1 and s.built_walls[0].hp == 200.0 and s.count(eng, "wood") == 5, "a wood wall costs 5 wood and has 200 HP")
 	s.set_count(eng, "stone", 5)
-	s.action(1, "build", ["stone", spot + Vector2(0, 4 * 32), true])
-	self.check(s.built_walls.size() == 2, "stone walls unlock after night 1")
-	s.action(2, "build", ["wood", spot + Vector2(0, -5 * 32), true])
-	self.check(s.built_walls.size() == 2, "only the Engineer builds")
-	s.world.rebuild(s.nodes, s.towers, s.built_walls)
-	self.check(s.world.resolve(spot, 10.0) != spot, "a wall blocks movement")
-	var wg = s.spawn(GameSim.GRUNT, 0, 0.0)
-	wg.pos = spot + dir * 32
-	# barely moving, so it stays pressed against the wall instead of walking around it
-	wg.spd = 0.001
-	s.phase = "night"
-	s.next_wave = INF
-	eng.pos = Vector2(0, -30 * 32)
-	sc.pos = Vector2(0, -30 * 32)
-	he.pos = Vector2(0, -30 * 32)
-	self.run(s, 3.5)
-	self.check(s.built_walls[0].hp < 200.0, "an enemy stuck at a wall attacks it")
-	s.built_walls[0].hp = 5.0
-	self.run(s, 2.5)
-	self.check(s.built_walls.size() == 1, "a wall at 0 HP is destroyed")
+	for kind in ["wood", "stone"]:
+		s.action(1, "build", [kind, eng.pos + Vector2(0, 192), true])
+	self.check(s.built_walls.is_empty() and s.count(eng, "wood") == 10 and s.count(eng, "stone") == 5, "wall construction is disabled for the Engineer")
 	# Revival kit: looted into the bag, carried to the dead teammate and used there (hold E)
 	s = self.new_match()
 	var dead = s.players[2]

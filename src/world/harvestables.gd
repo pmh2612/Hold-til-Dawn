@@ -1,7 +1,7 @@
 class_name Harvestables
 extends RefCounted
 # Every tree, loose rock and herb-like plant scattered over the island is a resource, never a decorative duplicate.
-# A landmark's own props (src/world/WorldLandmarks.cs) are not: they stay as scenery (WorldGeometry.cs).
+# A landmark's own props (src/world/world_landmarks.gd) are not: they stay as scenery (WorldGeometry.cs).
 
 static func type_of(sprite) -> int:
 	for prefix in ["pine_", "lm_palm_", "lm_mangrove_", "lm_log_", "lm_sticks_"]:

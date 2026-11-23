@@ -72,9 +72,9 @@ func run() -> void:
 	for name in ["lm_tent_0", "lm_console_0", "lm_cart_0", "lm_warning_0", "lm_cargo_stack_0", "lm_waterpump_0"]:
 		check(w.lm_props.any(func(p): return p[1] == name) and load("res://art/landmarks/%s.png" % [name]) != null, name + " is shipped and placed")
 		check(not w.harvest_sites.any(func(p): return p.sprite == name), name + " cannot be farmed")
-	check(Main.low_health_strength(90, 100) == 0 and Main.low_health_strength(10, 100) > Main.low_health_strength(35, 100), "red border increases as health falls")
-	check(GameSim.ROAM_CHECK < 15 and GameSim.ROAM_MAX > 8 and GameSim.roam_chance(Vector2(0, 2200)) > 0.3, "daytime encounters are more frequent and bounded")
-	check(s.exploration_chests.size() == 20 and s.exploration_chests.filter(func(c): return c.landmark > 4).size() == 14, "20 chests, 14 at expedition landmarks and six scattered")
+	check(SurvivalFeedbackUi.low_health_strength(90, 100) == 0 and SurvivalFeedbackUi.low_health_strength(10, 100) > SurvivalFeedbackUi.low_health_strength(35, 100), "red border increases as health falls")
+	check(GameSim.ROAM_CHECK < 15 and GameSim.ROAM_MAX > 8 and SimRoamers.roam_chance(Vector2(0, 2200)) > 0.3, "daytime encounters are more frequent and bounded")
+	check(s.exploration_chests.size() == 20 and s.exploration_chests.filter(func(c): return c.landmark > 4).size() == 10, "20 chests, ten at expedition landmarks and ten scattered")
 	var p = s.players[1]
 	var q = s.players[2]
 	for c in Array(s.exploration_chests.filter(func(c): return c.component >= 0)).duplicate():
@@ -91,9 +91,10 @@ func run() -> void:
 	check(s.supplies_got() == 3 and not s.supplies_all_in(), "finding parts requires assembling the radio")
 	s.dawn()
 	check(s.supplies_got() == 3, "radio parts persist through dawn")
-	p.pos = GameSim.WORKBENCH_POS + Vector2(0, 24)
-	s.try_build_radio(p, 3.1)
-	check(s.radio_built, "radio is assembled at the workbench")
+	p.pos = GameSim.RADIO_POS + Vector2(0, 24)
+	s.action(p.id, "radio_open", null)
+	s.try_build_radio(p, 5.1)
+	check(s.radio_built and s.radio_parts_placed.count(1) == 3, "radio is assembled at its own table with three installed parts")
 	s.k = 5
 	s.night()
 	s.t = 0.0

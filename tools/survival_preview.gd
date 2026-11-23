@@ -26,15 +26,15 @@ func _ready() -> void:
 			game.sim.tick_tower_construction(p, 3)
 		game.local_pos = p.pos
 		game.craft_open = stage == 3
-		game.craft_tier = 1
-		game.craft_sel = 1
+		game.craft_panel.craft_tier = 1
+		game.craft_panel.craft_sel = 1
 		game.on_snap(game.sim.snapshot())
 		game.local_tp = p.tp
 		game.pending_inputs.clear()
 		var camera = game.cam
 		for frame in range(20):
 			game._process(0.016)
-			game.tick_landmark_ground()
+			game.landmark_details.tick_landmark_ground()
 			camera.position = at - Vector2(0, 30 if stage == 2 else 0)
 			camera.zoom = Vector2.ONE * (1.25 if stage == 1 or stage == 2 else 1.5)
 			camera.reset_smoothing()

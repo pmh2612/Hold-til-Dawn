@@ -66,29 +66,29 @@ func _draw() -> void:
 	draw_rect(get_viewport_rect(), Color("30383D"))
 	var font = ThemeDB.fallback_font
 	draw_string(font, Vector2(32, 45), "Harvesting: wood / stone / herbs", 22)
-	prepare_harvest_feedback()
+	node_break.prepare_harvest_feedback()
 	var i: int = 0
 	for n in snap.nodes:
 		var pos: Vector2 = Vector2(n[1])
 		var amount: int = int(n[2])
-		var name = node_sprite(n, 0)
+		var name = node_break.node_sprite(n, 0)
 		if amount > 0:
 			var expected = names[i] + ("_0" if amount == 5 else "_dmg%s_0" % [5 - amount])
 			if name != expected:
 				Cs.fail("Wrong harvested sprite: " + name)
 				return
-		var tint: Color = node_modulate(n)
+		var tint: Color = node_break.node_modulate(n)
 		if tint.r > 1:
 			lit_frames += 1
-		if node_offset(n).length() > 2.1 or node_scale(n) != 1:
+		if node_break.node_offset(n).length() > 2.1 or node_break.node_scale(n) != 1:
 			Cs.fail("Resource deformed during impact")
 			return
-		sprite_2(name, pos + node_offset(n), 1, tint)
-		draw_player(i + 1, snap.ps[i + 1], pos + Vector2(0, 40))
+		sprite_2(name, pos + node_break.node_offset(n), 1, tint)
+		player_view.draw_player(i + 1, snap.ps[i + 1], pos + Vector2(0, 40))
 		draw_string(font, pos + Vector2(-54, 108), "%s / %s of 5" % [Cs.s(GameSim.ROLES[i]), amount], 16)
 		i += 1
-	draw_chips()
-	draw_harvest_feedback()
+	node_break.draw_chips()
+	node_break.draw_harvest_feedback()
 	var stage: int = mini(5, int(float(clock) * 0.35))
 	var save: bool = review_frame % 5 == 0 or stage != last_stage
 	last_stage = stage

@@ -41,8 +41,8 @@ func _ready() -> void:
 	var nodes = Array(s.nodes).duplicate()
 	var minimum = [36, 32, 36]
 	for type in range(3):
-		var c: Vector2 = WorldGeometry.home_farm_centre(type)
-		var here = Array(nodes.filter(func(n): return int(n["type"]) == type and WorldGeometry.in_home_farm_2(Vector2(n["pos"]), type))).duplicate()
+		var c: Vector2 = WorldHomeFarms.home_farm_centre(type)
+		var here = Array(nodes.filter(func(n): return int(n["type"]) == type and WorldHomeFarms.in_home_farm_2(Vector2(n["pos"]), type))).duplicate()
 		var soil = Cs.first_or_default(WorldGeometry.landmark_soils, func(p): return p.id == type + 2)
 		if here.size() < minimum[type] or w.lm_at[type + 2] != c or w.soil_centre(soil) != c:
 			Cs.fail("Home farm and its soil have different centres or insufficient resources")
@@ -53,7 +53,7 @@ func _ready() -> void:
 		for n in here:
 			var p: Vector2 = Vector2(n["pos"])
 			for offset in [Vector2.ZERO, Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN]:
-				if WorldGeometry.soil_coverage(soil, p - c + offset * (Harvestables.radius(n) + 3)) < 0.999:
+				if WorldLandmarkDetails.soil_coverage(soil, p - c + offset * (Harvestables.radius(n) + 3)) < 0.999:
 					Cs.fail("Home %s resource has exposed grass around its footprint at %s" % [type, Cs.s(p / 32)])
 					return
 		var walker: Vector2 = c - Vector2(WorldGeometry.home_farm_radii.x + 24, 0)
@@ -63,7 +63,7 @@ func _ready() -> void:
 		if walker.distance_to(goal) > 3:
 			Cs.fail("Home farm %s central aisle is blocked" % [type])
 			return
-		var outside: int = nodes.filter(func(n): return int(n["type"]) == type and not WorldGeometry.in_home_farm(Vector2(n["pos"]))).size()
+		var outside: int = nodes.filter(func(n): return int(n["type"]) == type and not WorldHomeFarms.in_home_farm(Vector2(n["pos"]))).size()
 		if outside != w.outside_after[type] or absf(w.outside_after[type] - w.outside_before[type] * 0.75) > 3.5:
 			Cs.fail("Outer material %s did not decrease by 25 percent" % [type])
 			return
@@ -82,7 +82,7 @@ func _ready() -> void:
 			continue
 		var p: Vector2 = Vector2(titanium[i]["pos"])
 		var soil = Cs.first_or_default(WorldGeometry.landmark_soils, func(s): return s.id == id)
-		if WorldGeometry.soil_coverage(soil, p - w.lm_at[id]) < 0.95 or w.in_expedition_aisle(p):
+		if WorldLandmarkDetails.soil_coverage(soil, p - w.lm_at[id]) < 0.95 or w.in_expedition_aisle(p):
 			Cs.fail("Titanium at site %s follows the old map centre or blocks a passage" % [id])
 			return
 	for id in [5, 7, 11]:

@@ -31,7 +31,7 @@ func reset() -> void:
 	sim.reset_player(ally)
 	p.pos = field
 	ally.pos = field + Vector2(0, 24)
-	p.inv = GameSim.empty_slots(12)
+	p.inv = SimInventory.empty_slots(12)
 	p.role = 2
 
 func give(item, count: int = 5) -> void:
@@ -95,7 +95,7 @@ func run() -> void:
 		sim.tick_craft(p, duration - 0.1)
 		check(p.craft_idx == i, id + " requires full craft time")
 		sim.tick_craft(p, 0.11)
-		var crafted: bool = sim.base_hp == 600 if id == "base" else p.armour == GameSim.ARMOUR_ITEMS.find(id) if GameSim.kind_of(id) == "armour" else sim.count(p, id) == int(r[4])
+		var crafted: bool = sim.base_hp == 600 if id == "base" else p.armour == GameSim.ARMOUR_ITEMS.find(id) if SimInventory.kind_of(id) == "armour" else sim.count(p, id) == int(r[4])
 		check(crafted, id + " craft output")
 		for res in r[1]:
 			check(sim.count(p, res) == 0, id + " spends " + Cs.s(res))

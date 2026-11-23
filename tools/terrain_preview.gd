@@ -63,11 +63,11 @@ func _ready() -> void:
 		game.on_snap(game.sim.snapshot())
 		game.local_tp = player.tp
 		game.pending_inputs.clear()
-		game.map_big = stage == 22
+		game.minimap.map_big = stage == 22
 		var frame: int = 0
-		while frame < (36 if focus else 12) or game.has_pending_landmark_ground:
+		while frame < (36 if focus else 12) or game.landmark_details.has_pending_landmark_ground:
 			game._process(0.016)
-			game.tick_landmark_ground()
+			game.landmark_details.tick_landmark_ground()
 			camera.position = world.cave_centre if id == 16 else at
 			if id == 18:
 				camera.position -= Vector2(0, 24)
@@ -114,11 +114,11 @@ func _ready() -> void:
 			await RenderingServer.frame_post_draw
 			frame += 1
 		var shot = get_viewport().get_texture().get_image()
-		if stage == 24 and game.cave_roof_opacity > 0.01:
+		if stage == 24 and game.cave_view.cave_roof_opacity > 0.01:
 			Cs.fail("The cave roof did not reveal its interior")
 			return
 		if stage == 24:
-			if not game.cave_interior_active or not game.hidden_outside_cave(world.cave_entrance + Vector2(80, 0)) or game.hidden_outside_cave(Vector2(player.pos)):
+			if not game.cave_view.cave_interior_active or not game.cave_view.hidden_outside_cave(world.cave_entrance + Vector2(80, 0)) or game.cave_view.hidden_outside_cave(Vector2(player.pos)):
 				Cs.fail("Cave isolation hides the wrong objects")
 				return
 			for p in [Vector2i(5, 5), Vector2(shot.get_width() - 6, 5), Vector2(5, shot.get_height() - 6), Vector2(shot.get_width() - 6, shot.get_height() - 6)]:
@@ -126,11 +126,11 @@ func _ready() -> void:
 				if pixel.r > 0.1 or pixel.g > 0.1 or pixel.b > 0.1:
 					Cs.fail("Exterior scenery remains visible from inside the cave")
 					return
-		if stage == 26 and (game.cave_interior_active or game.cave_roof_opacity < 0.99):
+		if stage == 26 and (game.cave_view.cave_interior_active or game.cave_view.cave_roof_opacity < 0.99):
 			Cs.fail("The exterior did not reappear after exiting the cave")
 			return
 		if stage == 28:
-			if not game.weather_interior_active or game.weather_roof_opacity > 0.01 or not game.hidden_outside_interior(world.weather_entrance + Vector2(0, 80)) or game.hidden_outside_interior(world.weather_centre):
+			if not game.weather_station.weather_interior_active or game.weather_station.weather_roof_opacity > 0.01 or not game.weather_station.hidden_outside_interior(world.weather_entrance + Vector2(0, 80)) or game.weather_station.hidden_outside_interior(world.weather_centre):
 				Cs.fail("Weather hut cutaway hides the wrong scene")
 				return
 			for x in range(shot.get_width()):
@@ -139,7 +139,7 @@ func _ready() -> void:
 			for y in range(shot.get_height()):
 				_ready_check_outside(Vector2i(5, y), shot)
 				_ready_check_outside(Vector2i(shot.get_width() - 6, y), shot)
-		if stage == 29 and (game.weather_interior_active or game.weather_roof_opacity < 0.99):
+		if stage == 29 and (game.weather_station.weather_interior_active or game.weather_station.weather_roof_opacity < 0.99):
 			Cs.fail("Weather hut exterior did not return on exit")
 			return
 		var name = "weather-entry" if stage == 27 else "weather-interior" if stage == 28 else "weather-exit" if stage == 29 else "fishing-jump-%s" % [stage - 29] if stage >= 30 else "cave-entry" if stage == 23 else "cave-interior" if stage == 24 else "garden-entry" if stage == 25 else "cave-exit" if stage == 26 else "landmark-%02d" % [id] if id > 0 else "bridge-%s" % [stage - 17] if stage < 22 else "map"

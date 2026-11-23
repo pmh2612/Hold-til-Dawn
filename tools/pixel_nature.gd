@@ -1814,7 +1814,7 @@ func chain_fence() -> Variant:
 # fence and watering can (18). Same rules as the rest of tools/PixelNature.cs (this is part of that tool):
 # 1 px = 1 game px, light from the upper left, a dark outline, a soft shadow to the lower right.
 # Writes art/landmarks/<name>_<variant>.png and art/landmarks/index.json ({name: [anchor_x, anchor_y, solid_radius_px]}).
-# Placed on the island by src/world/WorldLandmarks.cs.
+# Placed on the island by src/world/world_landmarks.gd.
 static var LIME = hex("5E5B4F", "817D6D", "A5A08C", "C6C1AA", "E2DDC8")
 static var PALM_BARK = hex("4A3A28", "6A5338", "8C7150", "AD9268")
 static var PALM_LEAF = hex("1E4526", "2C6230", "3F823A", "62A348", "8FC45A")

@@ -25,7 +25,7 @@ static var hills = []
 static var trees = []
 static var landmarks = []
 static var bays = []
-# walkable decks out over the water (the Old Fishing Pier, src/world/WorldLandmarks.cs)
+# walkable decks out over the water (the Old Fishing Pier, src/world/world_landmarks.gd)
 static var docks = []
 # the island's box, in pixels
 static var box: Rect2 = Rect2()
@@ -217,7 +217,7 @@ static func by_id(id: int) -> Variant:
 # (IslandMap.OnLand): players, enemies, bosses and bots cross only on a bridge, and the bots' and enemies' route
 # grids mark the water solid the same way they mark the sea. Grass, trees, rocks and landmarks keep off the
 # water and its muddy banks (IslandMap.OnGrass). Each river runs straight north-south under its bridges, so the
-# decks are plain east-west boxes. Drawn by src/world/view/Main.Rivers.cs.
+# decks are plain east-west boxes. Drawn by src/world/view/rivers.gd.
 # half the width of the water, and the muddy bank on each side
 const RIVER_HALF: float = 2.2 * TL
 const RIVER_BANK: float = 0.9 * TL

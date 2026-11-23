@@ -15,12 +15,14 @@ func _ready() -> void:
 	game.sim.start_match()
 	game.my_id = 1
 	var p = game.sim.players[1]
-	var chest = game.sim.exploration_chests.filter(func(c): return c.landmark == 5)[0]
+	var chest = game.sim.exploration_chests.filter(func(c): return c.landmark > 4)[0]
 	var camera = game.cam
-	var names = ["sealed", "unlocking", "opened", "storage", "radio-build", "radio-online", "map"]
+	var names = ["sealed", "unlocking", "opened", "storage", "radio-table", "radio-missing", "radio-parts", "radio-ready", "radio-build", "radio-online", "craft-basic", "craft-stone", "craft-titanium", "map"]
 	var stage: int = 0
 	while stage < names.size():
-		var at: Vector2 = chest.pos if stage < 4 else GameSim.WORKBENCH_POS
+		var name_: String = names[stage]
+		var crafting: bool = name_.begins_with("craft-")
+		var at: Vector2 = chest.pos if stage < 4 else GameSim.WORKBENCH_POS if crafting else GameSim.RADIO_POS
 		game.sim.teleport(p, at + Vector2(0, 32) if stage < 4 else at + Vector2(0, 24))
 		if stage == 0:
 			game.sim.set_count(p, "chest_key", 2)
@@ -30,34 +32,51 @@ func _ready() -> void:
 		if stage == 2:
 			p.inter = true
 			game.sim.interact(p, 1.1)
-		game.bag_open = stage == 3
-		game.bag_exploration_chest = chest.id if stage == 3 else -1
-		if stage == 4:
-			for i in range(3):
-				game.sim.rescue_components[i] = 1
-			p.inter = true
-			game.sim.try_build_radio(p, 1.5)
-		if stage == 5:
-			game.sim.try_build_radio(p, 1.6)
+		game.inventory.bag_open = stage == 3
+		game.exploration_chests.bag_exploration_chest = chest.id if stage == 3 else -1
 		game.local_pos = p.pos
-		game.map_big = stage == 6
+		game.pending_inputs.clear()
+		var radio_panel: bool = name_ in ["radio-missing", "radio-parts", "radio-ready", "radio-build", "radio-online"]
+		if name_ == "radio-parts":
+			game.sim.rescue_components = [1, 1, 0]
+		if name_ == "radio-ready":
+			game.sim.rescue_components = [1, 1, 1]
+		if radio_panel:
+			game.sim.action(p.id, "radio_open", null)
+		if name_ == "radio-build":
+			game.sim.action(p.id, "radio_repair", null)
+			game.sim.try_build_radio(p, 2.5)
+		if name_ == "radio-online":
+			game.sim.try_build_radio(p, 2.6)
+			assert(game.sim.radio_built)
+		if crafting:
+			p.inter = false
+			game.sim.unlock = 2
+			for res in GameSim.RES:
+				game.sim.set_count(p, res, 20)
+			game.craft_panel.select_craft_tier(0 if name_ == "craft-basic" else 1 if name_ == "craft-stone" else 2)
+			game.craft_panel.craft_sel = 8 if name_ == "craft-basic" else 15 if name_ == "craft-stone" else 6
+		game.craft_panel.radio_mode = radio_panel
+		game.craft_open = crafting or radio_panel
+		game.local_pos = p.pos
+		game.minimap.map_big = name_ == "map"
 		game.sim.clock += 0.5
 		game.on_snap(game.sim.snapshot())
-		if stage == 2 and (not chest.opened or not game.bag_open or game.bag_exploration_chest != chest.id):
+		if stage == 2 and (not chest.opened or not game.inventory.bag_open or game.exploration_chests.bag_exploration_chest != chest.id):
 			Cs.fail("Unlocking must automatically open the correct storage panel")
 			return
-		game.bag_open = stage == 3
-		game.bag_exploration_chest = chest.id if stage == 3 else -1
-		if stage == 3 and game.bag_slots(Vector2(960, 540), game.sim.snapshot().get("ps").get(1)).size() != 16:
+		game.inventory.bag_open = stage == 3
+		game.exploration_chests.bag_exploration_chest = chest.id if stage == 3 else -1
+		if stage == 3 and game.inventory.bag_slots(Vector2(960, 540), game.sim.snapshot().get("ps").get(1)).size() != 16:
 			Cs.fail("Chest UI must have eight bag and eight chest slots")
 			return
 		game.local_tp = p.tp
 		game.pending_inputs.clear()
 		for frame in range(20):
 			game._process(0.016)
-			game.tick_landmark_ground()
+			game.landmark_details.tick_landmark_ground()
 			camera.position = at
-			camera.zoom = Vector2.ONE * (2 if stage < 4 else 1.5)
+			camera.zoom = Vector2.ONE * (2 if stage < 4 else 2.5)
 			camera.reset_smoothing()
 			game.hud.visible = true
 			game.banner.visible = false

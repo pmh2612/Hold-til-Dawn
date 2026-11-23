@@ -37,7 +37,7 @@ func _ready() -> void:
 					Cs.fail("Missing pose: %s/%s/%s" % [name, row, col])
 					return
 				checked += 1
-	if absf(BOSS_DRAW_SCALE / 2.0 - 1.5) > 0.001:
+	if absf(EnemyView.BOSS_DRAW_SCALE / 2.0 - 1.5) > 0.001:
 		Cs.fail("Incorrect boss scale")
 		return
 	print("ENEMY DESIGN ASSETS OK: %s cells, 10 sheets, boss scale 1.5 times previous" % [checked])
@@ -63,7 +63,7 @@ func _draw() -> void:
 	var font = ThemeDB.fallback_font
 	draw_string(font, Vector2(24, 28), "ENEMY REDESIGN / actual in-game size", 20)
 	draw_string(font, Vector2(650, 65), "Scout / size reference", 13)
-	char_("reference", "scout", Vector2(715, 110), PI / 2, 1.0, Color.WHITE)
+	player_view.char_("reference", "scout", Vector2(715, 110), PI / 2, 1.0, Color.WHITE)
 	var shown = {}
 	for i in range(names.size()):
 		var boss: bool = i >= 3
@@ -75,14 +75,14 @@ func _draw() -> void:
 		cmove[key] = [foot, -1.0 if review_frame < 96 else float(clock), angle, -1]
 		if review_frame < 192:
 			var enemy = [100 + i, GameSim.BOSS if boss else i, foot, 100.0, 100.0, 28.8 if boss else 20.0 if i == 2 else 16.0, index if boss else -1, "glow" if review_frame >= 96 and review_frame % 12 < 4 else "", angle, review_frame >= 96 and review_frame % 12 < 4]
-			draw_enemy(enemy, foot)
+			enemy_view.draw_enemy(enemy, foot)
 			shown[100 + i] = true
 		draw_string(font, foot + Vector2(-55, 20), names[i].replace("boss_", ""), 13)
-	note_fallen(shown)
+	enemy_view.note_fallen(shown)
 	var corpses = []
-	corpse_items(corpses)
+	enemy_view.corpse_items(corpses)
 	for item in corpses:
-		draw_corpse(int(item[2]))
+		enemy_view.draw_corpse(int(item[2]))
 	var _old1 = review_frame
 	review_frame += 1
 	var captured_frame: int = _old1

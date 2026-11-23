@@ -74,8 +74,8 @@ func capture() -> void:
 		await RenderingServer.frame_post_draw
 		await RenderingServer.frame_post_draw
 		# Normal gameplay advances these jobs in _Process; this tool freezes the game for screenshots.
-		while game.has_pending_landmark_ground:
-			game.tick_landmark_ground()
+		while game.landmark_details.has_pending_landmark_ground:
+			game.landmark_details.tick_landmark_ground()
 			game.queue_redraw()
 			await RenderingServer.frame_post_draw
 		var img = get_viewport().get_texture().get_image()
