@@ -4,12 +4,13 @@ extends RefCounted
 # Part of Main (main.gd); in the C# version this was ui/gameplay/Main.CraftPanel.cs.
 # Owner: Vu Duc Viet Anh. The workbench tab (MEC-10, BAL-19, recipe table in GDD section 3.2), opened with C.
 # It takes the middle of the screen like the bag: on the left every recipe as a card with its icon, grouped by
-# tier; on the right the picked recipe in detail (what it does, its numbers) and how it is made, drawn as
+# category and tier; on the right the picked recipe in detail (what it does, its numbers) and how it is made, drawn as
 # ingredients + ingredients -> result, the steps to follow and a Craft button. A number key still crafts at once.
 # The server decides (GameSim.CanCraft); the reasons shown here only mirror its rules.
 # the recipe shown on the right
 var craft_sel: int = 0
 var craft_tier: int = 0
+var craft_category: int = 0
 var radio_mode: bool = false
 
 # constants shared with Main
@@ -25,20 +26,32 @@ func craft_choices() -> Variant:
 	var choices = []
 	var i: int = 0
 	while i < GameSim.RECIPES.size():
-		if int(GameSim.RECIPES[i][2]) == craft_tier:
+		if int(GameSim.RECIPES[i][2]) == craft_tier and category_of(i) == craft_category:
 			choices.append(i)
 		i += 1
 	return choices
 
+static func category_of(i: int) -> int:
+	return 0 if SimInventory.kind_of(GameSim.RECIPES[i][3]) in ["weapon", "ammo"] else 1
+
+func craft_category_button(vs: Vector2, category: int) -> Rect2:
+	var p = craft_panel_rect(vs)
+	var w: float = (craft_left_w(p) - 8) / 2
+	return Rect2(p.position.x + 20 + category * (w + 4), p.position.y + HEAD_H + 4, w, 26)
+
+func select_craft_category(category: int) -> void:
+	craft_category = clampi(category, 0, 1)
+	select_craft_tier(craft_tier)
+
 func craft_tier_button(vs: Vector2, tier: int) -> Rect2:
 	var p: Rect2 = craft_panel_rect(vs)
 	var w: float = (craft_left_w(p) - 12) / 3
-	return Rect2(p.position.x + 20 + tier * (w + 4), p.position.y + HEAD_H + 4, w, 26)
+	return Rect2(p.position.x + 20 + tier * (w + 4), p.position.y + HEAD_H + 36, w, 26)
 
 func select_craft_tier(tier: int) -> void:
 	craft_tier = clampi(tier, 0, 2)
 	var choices = craft_choices()
-	if not choices.has(craft_sel):
+	if not choices.is_empty() and not choices.has(craft_sel):
 		craft_sel = choices[0]
 
 const CARD_H: float = 92.0
@@ -61,13 +74,8 @@ func craft_card(vs: Vector2, i: int) -> Rect2:
 	var p: Rect2 = self.craft_panel_rect(vs)
 	var lw: float = self.craft_left_w(p)
 	var cw: float = floorf((lw - 3 * CARD_GAP) / 4)
-	var r = GameSim.RECIPES[i]
-	var tier: int = int(r[2])
-	var k: int = 0
-	for j in range(i):
-		if int(GameSim.RECIPES[j][2]) == tier:
-			k += 1
-	var y: float = p.position.y + HEAD_H + 44 + k / 4 * (CARD_H + 12)
+	var k: int = craft_choices().find(i)
+	var y: float = p.position.y + HEAD_H + 70 + k / 4 * (CARD_H + 12)
 	return Rect2(p.position.x + 20 + k % 4 * (cw + CARD_GAP), y, cw, CARD_H)
 
 func craft_detail(p: Rect2) -> Rect2:
@@ -84,13 +92,8 @@ static func num(v) -> Variant:
 	var f: float = float(v)
 	return str(int(f)) if f == floorf(f) else String.num(f, 1)
 
-static func key_of(i: int) -> Variant:
-	var n: int = 0
-	var tier: int = int(GameSim.RECIPES[i][2])
-	for j in range(i + 1):
-		if int(GameSim.RECIPES[j][2]) == tier:
-			n += 1
-	return Cs.s(n % 10)
+func key_of(i: int) -> Variant:
+	return str(craft_choices().find(i) + 1)
 
 func craft_seconds(r) -> float:
 	return float(r[4]) / 20.0 if r[3] == "base" else GameSim.CRAFT_TIME
@@ -127,7 +130,8 @@ func craft_desc(id) -> Variant:
 		var ranged: bool = s[3]
 		out.append("DMG " + num(s[0]) + " | " + num(s[1]) + "/s | " + ("Range " if ranged else "Reach ") + num(s[2]))
 		if id == "bow":
-			out.append("Craft arrows separately")
+			out.append("Uses arrows | All roles")
+			out.append("Scout starter bow: infinite ammo")
 		return out
 	var k: int = 1
 	while k < GameSim.ARMOUR_ITEMS.size():
@@ -135,7 +139,9 @@ func craft_desc(id) -> Variant:
 			out.append("-%d%% damage taken" % [int(Cs.round_even(float(GameSim.ARMOUR[k]) * 100.0))])
 			return out
 		k += 1
-	if id == "bandage":
+	if id == "arrow":
+		out.append("Bow ammo | Auto-loads")
+	elif id == "bandage":
 		out.append("Q: +30 HP")
 	elif id == "revive":
 		out.append("Hold E: revive dead ally")
@@ -196,8 +202,14 @@ func draw_craft_panel(c, vs) -> void:
 	c.draw_rect(p, GOLD * Color(1, 1, 1, 0.7), false, 1.5)
 	c.draw_line(Vector2(p.position.x + 16, p.position.y + HEAD_H - 8), Vector2(p.end.x - 16, p.position.y + HEAD_H - 8), Color(1, 1, 1, 0.1), 1.0)
 	main.text(c, p.position + Vector2(20, 28), "WORKBENCH", 18, GOLD, 0, -1.0, true)
-	# --- recipe cards, by tier
+	# Categories separate weapons/ammo from armour, healing and tools; tiers still gate progression.
 	var lw: float = self.craft_left_w(p)
+	for category in range(2):
+		var tab = craft_category_button(v, category)
+		var selected: bool = craft_category == category
+		c.draw_rect(tab, Color("594A25") if selected else Color("15171F"))
+		c.draw_rect(tab, GOLD if selected else Color("45464C"), false, 1)
+		main.text(c, tab.position + Vector2(0, 18), "WEAPONS" if category == 0 else "EQUIPMENT", 12, GOLD if selected else Color.WHITE, 1, tab.size.x, true)
 	for t in range(3):
 		var tab: Rect2 = craft_tier_button(v, t)
 		var open: bool = t == 3 or t <= main.snap.get("unlock", 0)
@@ -205,9 +217,8 @@ func draw_craft_panel(c, vs) -> void:
 		c.draw_rect(tab, GOLD if craft_tier == t else Color(1, 1, 1, 0.2), false, 1.0)
 		main.text(c, Vector2(tab.position.x, tab.position.y + 18), "BASIC" if t == 0 else "STONE" if t == 1 else "TITANIUM", 11, GOLD if open else Color.GRAY, 1, tab.size.x, true)
 	var busy: int = int(me[26])
-	for i in range(GameSim.RECIPES.size()):
-		if int(GameSim.RECIPES[i][2]) == craft_tier:
-			self.draw_craft_card(c, me, i, self.craft_card(v, i), mouse, busy)
+	for i in craft_choices():
+		self.draw_craft_card(c, me, i, self.craft_card(v, i), mouse, busy)
 	draw_craft_bag(c, v, me, mouse)
 	c.draw_line(Vector2(p.position.x + 20 + lw + 12, p.position.y + HEAD_H), Vector2(p.position.x + 20 + lw + 12, p.end.y - 14), Color(1, 1, 1, 0.12), 1.0)
 	self.draw_craft_detail(c, me, v, self.craft_detail(p), mouse, busy)
@@ -450,6 +461,10 @@ func craft_mouse(ev) -> bool:
 	if ev.pressed:
 		var vs: Vector2 = Vector2(main.hud.size)
 		var mouse: Vector2 = Vector2(main.hud.get_local_mouse_position())
+		for category in range(2):
+			if craft_category_button(vs, category).has_point(mouse):
+				select_craft_category(category)
+				return true
 		for t in range(3):
 			if craft_tier_button(vs, t).has_point(mouse):
 				select_craft_tier(t)

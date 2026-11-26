@@ -71,6 +71,25 @@ func _ready() -> void:
 	if w.harvest_sites.filter(func(p): return p.type == 3 and w.in_cave_floor(p.pos)).size() != 19:
 		Cs.fail("The wood/stone/herb reduction changed titanium veins")
 		return
+	var sprite_index = JSON.parse_string(FileAccess.get_file_as_string("res://art/nature/index.json"))
+	for ore in w.harvest_sites.filter(func(p): return p.type == 3 and w.in_cave_floor(p.pos)):
+		for stage in range(5):
+			var sprite: String = ore.sprite if stage == 0 else Harvestables.stage_sprite(ore.sprite, stage)
+			var tex: Texture2D = load("res://art/nature/" + sprite + ".png")
+			var meta = sprite_index[sprite]
+			# Use actual art dimensions and anchors, not the collision radius or placement helper.
+			var r: Rect2 = Rect2(ore.pos - Vector2(meta[0], meta[1]), tex.get_size()).grow(6)
+			var outline = PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)])
+			for point in outline:
+				if not w.in_cave_floor(point):
+					Cs.fail("Titanium sprite extends outside the chamber: " + sprite)
+					return
+			for wall in w.cave_walls:
+				for polygon in [wall[0], wall[1]]:
+					if not Geometry2D.intersect_polygons(outline, PackedVector2Array(polygon)).is_empty():
+						Cs.fail("Titanium overlaps a raised cave wall: " + sprite)
+						return
+	print("CAVE ORE ALL OK: 19 veins, all five sprite stages clear the floor edge and raised walls")
 	if w.garden_beds.any(func(b): return w.harvest_sites.filter(func(p): return p.type == 2 and b.has_point(p.pos)).size() != 6):
 		Cs.fail("The outer herb reduction did not preserve all six garden beds")
 		return

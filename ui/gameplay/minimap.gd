@@ -150,13 +150,6 @@ func draw_minimap(c, vs, me) -> void:
 	var texel: float = MAP_TEX / (2 * reach)
 	var src = Rect2((focus - Vector2.ONE * view + Vector2.ONE * reach) * texel, Vector2.ONE * (2 * view * texel))
 	c.draw_texture_rect_region(map_tex, r, src)
-	var w = main.geometry
-	if big:
-		for _it1 in IslandMap.bays:
-			var name = _it1[0]
-			var pos = _it1[1]
-			if inside.has_point(_draw_minimap_to(pos, focus, mid, scale)):
-				main.text(c, _draw_minimap_to(pos, focus, mid, scale) + Vector2(-50, 4), name.to_upper(), 9, Color.BLACK, 1, 100)
 	# camera view
 	var ct = main.get_viewport().get_canvas_transform()
 	var screen: Vector2 = main.get_viewport_rect().size

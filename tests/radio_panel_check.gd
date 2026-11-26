@@ -99,6 +99,28 @@ func _ready() -> void:
 	refresh(game, p)
 	press(game, KEY_C)
 	check(game.craft_open and not game.craft_panel.radio_mode, "C at the workbench still opens ordinary recipes")
+	var panel = game.craft_panel
+	var seen: Array = []
+	var vs = Vector2(960, 540)
+	for category in range(2):
+		panel.select_craft_category(category)
+		for tier in range(3):
+			panel.select_craft_tier(tier)
+			var choices: Array = panel.craft_choices()
+			check(not choices.is_empty() and choices.has(panel.craft_sel), "category %d tier %d selects a visible recipe" % [category, tier])
+			for k in range(choices.size()):
+				var i: int = choices[k]
+				var kind: String = SimInventory.kind_of(GameSim.RECIPES[i][3])
+				check((kind in ["weapon", "ammo"]) == (category == 0) and not seen.has(i), "recipe %d appears once in its correct category" % i)
+				seen.append(i)
+				check(panel.key_of(i) == str(k + 1), "recipe %d shortcut matches its visible position" % i)
+				var rect: Rect2 = panel.craft_card(vs, i)
+				check(rect.position.y > panel.craft_tier_button(vs, 0).end.y and rect.end.y < panel.craft_panel_rect(vs).position.y + 330 and rect.end.x < panel.craft_detail(panel.craft_panel_rect(vs)).position.x, "recipe %d fits between category tabs and bag" % i)
+	check(seen.size() == GameSim.RECIPES.size(), "all 16 recipes remain available across both categories")
+	check(game.inventory.item_label(["starter_bow", 1]).contains("Infinite") and game.inventory.item_label(["bow", 1, 7]).contains("7 / 30"), "starter and crafted bow show distinct ammunition information")
+	check(game.inventory.item_label(["explosive_arrow", 3]).contains("LMB") and panel.craft_desc("explosive_arrow").size() == 2, "explosive ammo explains bow requirement and firing control")
+	panel.select_craft_category(0)
+	panel.select_craft_tier(0)
 	p.inv = SimInventory.empty_slots(8)
 	p.note = ""
 	p.note_t = 0
@@ -123,11 +145,12 @@ func _ready() -> void:
 	p.note = ""
 	p.note_t = 0
 	refresh(game, p)
-	press(game, KEY_5)
+	game.craft_panel.select_craft_category(1)
+	press(game, KEY_2)
 	check(p.craft_idx < 0 and p.note == "" and s.count(p, "herb") == 20, "Engineer flask shortcut stays disabled silently despite sufficient materials")
 	p.role = 1
 	refresh(game, p)
-	press(game, KEY_5)
+	press(game, KEY_2)
 	check(p.craft_idx == 13, "Healer flask shortcut enables at the unlocked workbench")
 	s.tick_craft(p, 3)
 	check(s.count(p, "healing_flask") == 1 and s.count(p, "herb") == 14 and s.count(p, "titanium") == 16, "Healer crafts one flask with the normal recipe cost")

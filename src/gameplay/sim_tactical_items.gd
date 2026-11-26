@@ -19,6 +19,8 @@ static func is_tactical_use(id) -> bool:
 	return id == "vine_trap" or id == "poison_flask" or id == "healing_flask" or id == "haste_tonic" or id == "repair_kit" or id == "explosive_arrow"
 
 static func tactical_description(id) -> Variant:
+	if id == "explosive_arrow":
+		return ["Blast DMG 32 | Radius 1.5", "Bow in bag | Select ammo + LMB"]
 	return ["DMG 22 | Reach 2.6", "Hits 2 targets"] if id == "long_spear" else ["DMG 30 | Stun 0.8s"] if id == "stun_maul" else ["Root: 2.5s"] if id == "vine_trap" else ["8 DMG/s | 5s"] if id == "poison_flask" else ["+8 HP/s | 5s"] if id == "healing_flask" else ["Speed +20% | 8s"] if id == "haste_tonic" else ["Hold E 2s: unlock", "Single use"] if id == "chest_key" else ["Blast DMG 32"] if id == "explosive_arrow" else ["+100 HP: door / tower"] if id == "repair_kit" else []
 
 static func player_speed(sim: GameSim, p) -> float:

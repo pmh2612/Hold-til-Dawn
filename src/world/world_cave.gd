@@ -155,10 +155,27 @@ static func build_cave_roof(world: WorldGeometry) -> void:
 static func add_cave_resources(world: WorldGeometry) -> void:
 	var ore: int = 0
 	var stone: int = 0
+	# Collision circles do not cover a crystal's full sprite or the raised, overhanging wall caps.
+	# Precompute safe positions once, then move each vein to the closest free position in the chamber.
+	var ore_positions: Array[Vector2] = []
+	for gy in range(-10, 10):
+		for gx in range(-19, 17):
+			var candidate: Vector2 = (world.cave_centre + WorldLandmarks.tl(gx * 0.5, gy * 0.5)).round()
+			if absf(candidate.y - world.cave_centre.y) >= 1.35 * TL and ore_sprite_fits(world, candidate):
+				ore_positions.append(candidate)
 	for y in [-3.5, -1.8, 1.8, 3.5]:
 		for x in [-8.0, -5.0, -2.0, 1.0, 4.0, 7.0]:
-			var p: Vector2 = (world.cave_centre + WorldLandmarks.tl(x + 0.45 * sin(x * 1.7 + y * 0.4), y + 0.27 * cos(x * 1.23))).round()
-			if not in_cave_floor(world, p) or not _add_cave_resources_free(world, p, 19.2):
+			if ore >= 19:
+				break
+			var target: Vector2 = world.cave_centre + WorldLandmarks.tl(x + 0.45 * sin(x * 1.7 + y * 0.4), y + 0.27 * cos(x * 1.23))
+			var p: Vector2 = Vector2.INF
+			var distance: float = INF
+			for candidate in ore_positions:
+				var d: float = candidate.distance_squared_to(target)
+				if d < distance and _add_cave_resources_free(world, candidate, 19.2):
+					p = candidate
+					distance = d
+			if not p.is_finite():
 				continue
 			var _old1 = ore
 			ore += 1
@@ -176,6 +193,19 @@ static func add_cave_resources(world: WorldGeometry) -> void:
 		stone += 1
 		world.harvest_sites.append(Harvestables.Site.new(p, "rock_" + Cs.s(_old2 % 5), 1, 19.84))
 		i += 1
+
+static func ore_sprite_fits(world: WorldGeometry, p: Vector2) -> bool:
+	# Both ore variants/stages are 48 x 44, anchored at (22,34). Include the harvest jolt and a gap.
+	var r: Rect2 = Rect2(p - Vector2(22, 34), Vector2(48, 44)).grow(8)
+	var footprint = PackedVector2Array([r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)])
+	for corner in footprint:
+		if not in_cave_floor(world, corner):
+			return false
+	for wall in world.cave_walls:
+		for polygon in [wall[0], wall[1]]:
+			if not Geometry2D.intersect_polygons(footprint, PackedVector2Array(polygon)).is_empty():
+				return false
+	return true
 
 # local function Free of the method above
 static func _add_cave_resources_free(world: WorldGeometry, p: Vector2, radius: float) -> bool:

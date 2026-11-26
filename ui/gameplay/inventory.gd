@@ -162,6 +162,18 @@ func draw_slot(c, r: Rect2, s, selected: bool, key_) -> void:
 		var n: int = SimInventory.loaded(s)
 		self.draw_item_icon(c, "arrow", r.end - Vector2(30, 8), 1.0)
 		main.text(c, Vector2(r.position.x, r.end.y - 3), Cs.s(n), 11, GOLD if n > 0 else NEON_RED, 2, r.size.x - 3, true)
+	elif s[0] == "starter_bow":
+		main.text(c, Vector2(r.position.x, r.end.y - 3), "INF", 9, GOLD, 2, r.size.x - 3, true)
+
+func item_label(s) -> String:
+	var name_: String = SimInventory.item_name(s[0])
+	if s[0] == "starter_bow":
+		return name_ + " | Infinite arrows"
+	if s[0] == "bow":
+		return name_ + " | %d / %d arrows" % [SimInventory.loaded(s), SimInventory.QUIVER]
+	if s[0] == "explosive_arrow":
+		return name_ + " | Bow in bag + LMB"
+	return name_
 
 # HUD element 8: the first four inventory slots, keys 1-4 or the mouse wheel.
 func draw_hotbar(c, vs, me) -> void:
@@ -171,8 +183,8 @@ func draw_hotbar(c, vs, me) -> void:
 	for i in range(GameSim.HOTBAR):
 		self.draw_slot(c, Rect2(x0 + i * (SLOT + SLOT_GAP), y0, SLOT, SLOT), me[7][i], i == int(me[25]), Cs.s(i + 1))
 	var selected = me[7][int(me[25])]
-	if selected != null and SimTacticalItems.is_tactical_use(Cs.s(selected[0])):
-		main.text(c, Vector2(0, y0 - 8), SimInventory.item_name(selected[0]), 11, GOLD, 1, vs.x)
+	if selected != null and (SimTacticalItems.is_tactical_use(Cs.s(selected[0])) or selected[0] in ["bow", "starter_bow"]):
+		main.text(c, Vector2(0, y0 - 8), item_label(selected), 11, GOLD, 1, vs.x)
 	if me.size() > 30 and me[30]:
 		main.text(c, Vector2(0, y0 - 42), "HASTE +20%", 11, Color("F0C76B"), 1, vs.x)
 	if me.size() > 31 and float(me[31]) > 0:
@@ -237,7 +249,7 @@ func draw_bag(c, vs, me) -> void:
 		var dragged: bool = drag_from != null and drag_from[0] == s[0] and drag_from[1] == i
 		self.draw_slot(c, s[2], null if dragged else item, is_inv and i == int(me[25]), Cs.s(i + 1) if is_inv and i < GameSim.HOTBAR else "")
 		if item != null and Rect2(s[2]).has_point(mouse) and drag_from == null:
-			main.text(c, Vector2(frame_.position.x, all.end.y + 14), SimInventory.item_name(item[0]), 11, Color.WHITE, 1, frame_.size.x)
+			main.text(c, Vector2(frame_.position.x, all.end.y + 14), item_label(item), 11, Color.WHITE, 1, frame_.size.x)
 	if drag_from != null:
 		var box_ = me[7] if drag_from[0] == "inv" else sto
 		var i: int = int(drag_from[1])

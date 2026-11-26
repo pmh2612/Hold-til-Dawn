@@ -41,20 +41,22 @@ func _ready() -> void:
 	local_pos = p.pos
 	snap = sim.snapshot()
 	craft_open = true
-	for t in range(3):
-		craft_panel.select_craft_tier(t)
-		var cards = craft_panel.craft_choices()
-		for i in cards:
-			var a: Rect2 = craft_panel.craft_card(Vector2(960, 540), i)
-			if a.end.x > craft_detail_right_edge():
-				Cs.fail("Card exceeds recipe column")
-				return
-			for j in cards:
-				if i != j and a.intersects(craft_panel.craft_card(Vector2(960, 540), j)):
-					Cs.fail("Overlapping recipe cards")
+	for category in range(2):
+		craft_panel.select_craft_category(category)
+		for t in range(3):
+			craft_panel.select_craft_tier(t)
+			var cards = craft_panel.craft_choices()
+			for i in cards:
+				var a: Rect2 = craft_panel.craft_card(Vector2(960, 540), i)
+				if a.end.x > craft_detail_right_edge():
+					Cs.fail("Card exceeds recipe column")
 					return
+				for j in cards:
+					if i != j and a.intersects(craft_panel.craft_card(Vector2(960, 540), j)):
+						Cs.fail("Overlapping recipe cards")
+						return
 	DirAccess.make_dir_recursive_absolute("res://.tmp/tactical-craft")
-	print("TACTICAL CRAFT LAYOUT OK: 16 equipment and maintenance cards in 3 tabs")
+	print("TACTICAL CRAFT LAYOUT OK: 16 recipes in 2 categories and 3 tiers")
 	if DisplayServer.get_name() == "headless":
 		finished = true
 		get_tree().quit()
@@ -72,6 +74,7 @@ func _process(delta: float) -> void:
 	var review_hud = hud
 	review_hud.visible = stage < 3
 	if stage < 3:
+		craft_panel.select_craft_category(CraftPanelUi.category_of(selected[stage]))
 		craft_panel.select_craft_tier(stage)
 		craft_panel.craft_sel = selected[stage]
 		review_hud.queue_redraw()
@@ -108,6 +111,8 @@ func _draw() -> void:
 	capturing = true
 	await RenderingServer.frame_post_draw
 	var shot = get_viewport().get_texture().get_image()
+	shot.convert(Image.FORMAT_RGBA8)
+	shot.linear_to_srgb()
 	shot.save_png("res://.tmp/tactical-craft/preview-%s.png" % [stage])
 	stage += 1
 	warm_frames = 0
