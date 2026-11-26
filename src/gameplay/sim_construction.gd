@@ -27,7 +27,7 @@ static func reserve_tower(sim: GameSim, p, slot: int, at: Vector2) -> bool:
 	# Discard attack input sampled before the placement action reached the simulation.
 	p.atk = false
 	p.tower_build_t = TOWER_BUILD_TIME
-	SimPlayers.note(sim, p, "Preparing dirt foundation and tower: 6 seconds. Stand still.")
+	SimPlayers.note(sim, p, "Building: 6s | Stay still")
 	return true
 
 static func tick_tower_construction(sim: GameSim, p, dt: float) -> bool:
@@ -39,7 +39,7 @@ static func tick_tower_construction(sim: GameSim, p, dt: float) -> bool:
 		if p.state != 0 or p.role != 2 or SimInventory.count(sim, p, "hammer") <= 0 or p.inside or p.craft_idx >= 0 or p.atk or p.taken > job.get("taken") or Vector2(p.pos).distance_to(Vector2(job.get("origin"))) > 4:
 			sim.construction.remove_at(i)
 			p.tower_build_t = 0.0
-			SimPlayers.note(sim, p, "Construction interrupted; materials kept")
+			SimPlayers.note(sim, p, "Build cancelled")
 			return false
 		p.activity = "repair"
 		p.activity_target = at
@@ -53,17 +53,17 @@ static func tick_tower_construction(sim: GameSim, p, dt: float) -> bool:
 		var why = SimTowers.tower_spot_problem(at, sim.world)
 		for q in sim.players.values():
 			if q.id != p.id and Vector2(q.pos).distance_to(at) < 1.1 * T:
-				why = "Someone is standing there"
+				why = "Spot occupied"
 		if sim.towers[job.get("slot")] != null:
-			why = "Tower slot is occupied"
+			why = "Tower slot occupied"
 		if not sim.free_tower:
 			if sim.unlock < 2:
-				why = "Unlocks after the first boss"
+				why = "Defeat first boss"
 			for id in GameSim.TOWER_COST:
 				if SimInventory.count(sim, p, id) < GameSim.TOWER_COST[id]:
 					why = "Need tower materials"
 		if why != "":
-			SimPlayers.note(sim, p, why + "; materials kept")
+			SimPlayers.note(sim, p, why)
 			return true
 		if sim.free_tower:
 			sim.free_tower = false
@@ -72,7 +72,7 @@ static func tick_tower_construction(sim: GameSim, p, dt: float) -> bool:
 				SimInventory.take(sim, p, id, GameSim.TOWER_COST[id])
 		SimTowers.place_tower(sim, job.get("slot"), at)
 		sim.world.rebuild(sim.nodes, sim.towers, sim.built_walls)
-		SimPlayers.note(sim, p, "Tower ready on dirt foundation")
+		SimPlayers.note(sim, p, "Tower ready")
 		return true
 	p.tower_build_t = 0.0
 	return false

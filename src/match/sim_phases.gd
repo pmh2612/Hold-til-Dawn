@@ -57,7 +57,7 @@ static func dusk(sim: GameSim) -> void:
 static func night(sim: GameSim) -> void:
 	SimSupplies.cancel_radio_build(sim)
 	if int(sim.k) == 5 and not sim.radio_built:
-		end(sim, false, "Locator radio incomplete: find all 3 parts in island chests and assemble it before night 5")
+		end(sim, false, "Locator radio incomplete")
 		return
 	sim.phase = "night"
 	sim.t = GameSim.NIGHT_LEN[sim.k - 1]
@@ -137,17 +137,17 @@ static func check_end(sim: GameSim, dt) -> void:
 			night_cleared(sim)
 			return
 		sim.t = 0.0
-		SimPlayers.say(sim, "The helicopter is coming")
+		SimPlayers.say(sim, "Rescue incoming")
 	if sim.t > 0:
 		return
 	if (sim.k == 2 or sim.k == 4) and not sim.boss_down_tonight:
-		end(sim, false, "Specimen still alive at dawn")
+		end(sim, false, "Boss survived the night")
 		return
 	if sim.k < 5:
 		night_cleared(sim)
 		return
 	if not SimSupplies.supplies_all_in(sim):
-		end(sim, false, "Locator radio incomplete: find all 3 parts in island chests and assemble it before night 5")
+		end(sim, false, "Locator radio incomplete")
 		return
 	# night 5 extraction (FML-13)
 	var clear = []
@@ -158,9 +158,9 @@ static func check_end(sim: GameSim, dt) -> void:
 			end(sim, true, "Helicopter landed at pad %s" % [GameSim.DOOR_NAMES[clear.find(true)]])
 		elif sim.base_hp > 500:
 			sim.ext = 60.0
-			SimPlayers.say(sim, "Keep a landing pad clear!")
+			SimPlayers.say(sim, "Clear a landing pad")
 		else:
-			end(sim, false, "No landing pad was clear")
+			end(sim, false, "Landing pads blocked")
 		return
 	sim.ext -= dt
 	for i in 3:
@@ -169,7 +169,7 @@ static func check_end(sim: GameSim, dt) -> void:
 			end(sim, true, "Helicopter landed at pad %s" % [GameSim.DOOR_NAMES[i]])
 			return
 	if sim.ext <= 0:
-		end(sim, false, "Extension ended without a clear pad")
+		end(sim, false, "Landing pads blocked")
 
 static func team_wiped(sim: GameSim) -> Variant:
 	return not sim.players.is_empty() and sim.players.values().filter(func(p): return p.state == 0).is_empty()

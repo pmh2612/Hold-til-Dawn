@@ -33,7 +33,7 @@ func _process(_delta: float) -> void:
 	%Title.text = "MISSION COMPLETE" if win else "BEACON LOST"
 	%Title.add_theme_color_override("font_color", Main.GOLD if win else Main.NEON_RED)
 	%Cause.text = r[1]
-	%Night.text = "Night reached: %d / 5" % [r[2]]
+	%Night.text = "Night %d / 5" % [r[2]]
 	var rows = []
 	for id in main.snap.ps:
 		var p = main.snap.ps[id]

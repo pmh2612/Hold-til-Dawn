@@ -24,6 +24,7 @@ static func drop(sim: GameSim, e) -> void:
 
 static func add_drop(sim: GameSim, pos, item, n) -> void:
 	sim.drops.append({"pos": pos, "item": item, "n": n, "ttl": DROP_TTL})
+	SimAudio.emit(sim, "drop_spawn", pos)
 
 static func tick_drops(sim: GameSim, dt) -> void:
 	for d in sim.drops:

@@ -5,7 +5,7 @@ var stage: int = 0
 var warm_frames: int = 0
 var capturing: bool = false
 var finished: bool = false
-var selected = [17, 2, 6]
+var selected = [15, 2, 6]
 
 func _ready() -> void:
 	# try (GDScript has no exceptions; the body runs unguarded)
@@ -54,7 +54,7 @@ func _ready() -> void:
 					Cs.fail("Overlapping recipe cards")
 					return
 	DirAccess.make_dir_recursive_absolute("res://.tmp/tactical-craft")
-	print("TACTICAL CRAFT LAYOUT OK: 18 equipment and maintenance cards in 3 tabs")
+	print("TACTICAL CRAFT LAYOUT OK: 16 equipment and maintenance cards in 3 tabs")
 	if DisplayServer.get_name() == "headless":
 		finished = true
 		get_tree().quit()

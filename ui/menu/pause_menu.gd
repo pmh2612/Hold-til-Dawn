@@ -6,7 +6,6 @@ extends RefCounted
 # (section 2.5) are scenes: ui/menu/pause_screen.tscn and ui/menu/result_screen.tscn.
 # A solo match pauses while the overlay is open; a network match will keep running (FTR-04).
 var paused = false
-static var CONTROLS = ["WASD move  |  Mouse aim  |  LMB attack / use item", "Hold E: gather, repair tower / door, revive", "Chest: hold E 2s + key; drag loot into bag", "1-4 / wheel: select  |  Tab bag  |  G give / drop", "Q bandage  |  RMB flask  |  C workbench / radio", "Engineer: T place tower; LMB confirm; RMB cancel", "F hold: enter base at night  |  V skip-day vote", "M island map (chest icons)  |  Ctrl + wheel zoom", "H show / hide controls  |  Esc pause / close"]
 
 var main: Main
 

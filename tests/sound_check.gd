@@ -43,12 +43,13 @@ func _ready() -> void:
 	host.my_id = 1
 	host.snap = snapshot()
 	var audio: Sound = host.sound
-	check(audio.sounds.size() == 52 and audio.sounds.values().all(func(v): return v is AudioStreamWAV and v.get_length() > 0), "all 52 branch sound assets load")
+	check(audio.catalog.effects.size() >= 100 and audio.sounds.values().all(func(v): return v is AudioStream and v.get_length() > 0), "all production effects, ambience and scores load")
 	check(audio.world_voices.size() == 32 and audio.flat_voices.size() == 10, "effect playback has a fixed voice budget")
-	for name in ["amb_day", "amb_night", "music_day", "music_night", "music_boss"]:
-		check(audio.sounds[name].loop_mode != AudioStreamWAV.LOOP_DISABLED, name + " loops")
-	check(is_equal_approx(audio.sounds.music_boss.get_length(), audio.sounds.music_night.get_length()), "boss drums match the night music length")
-	for entry in [[0, 0, "chop"], [1, 0, "mine"], [2, 0, "herb"], [3, 0, "mine"], [0, 2, "crumble"]]:
+	check(audio.channel_streams.values().all(func(s): return s.loop_end > s.loop_begin and s.loop_end > 100), "action loop streams cover their full sample data")
+	for name in audio.catalog.music:
+		check(audio.sounds["music_" + name].loop == (name not in ["win", "loss"]), name + " has the correct score loop behaviour")
+	check(audio.sounds.music_boss.get_length() > 60 and audio.sounds.music_boss != audio.sounds.music_night_early, "boss has a full separate orchestral score")
+	for entry in [[0, 0, "chop"], [1, 0, "mine"], [2, 0, "herb"], [3, 0, "mine_metal"], [0, 2, "wood_break"]]:
 		host.clock += 1
 		audio.sound_last.clear()
 		audio.harvest(entry[0], Vector2.ZERO, entry[1])
@@ -68,7 +69,7 @@ func _ready() -> void:
 		a.ph = phase[0]
 		b.ph = phase[1]
 		event(a, b, phase[2])
-	for change in [[3, 90, "my_hurt"], [5, 1, "downed"], [5, 2, "death"], [11, true, "swing"], [30, true, "haste"], [28, 1, "revive"]]:
+	for change in [[3, 90, "my_hurt"], [5, 1, "downed"], [5, 2, "death"], [11, true, "attack_basic"], [30, true, "haste"]]:
 		var after := before.duplicate(true)
 		after.ps[1][change[0]] = change[1]
 		event(before, after, change[2])
@@ -97,7 +98,7 @@ func _ready() -> void:
 	var enemy := [100, GameSim.BOSS, Vector2.ZERO, 100, 100, 32, 0, [], 0, false, false, false]
 	after = before.duplicate(true)
 	after.en = [enemy]
-	event(before, after, "boss_roar")
+	event(before, after, "boss_arrival")
 	var hurt := after.duplicate(true)
 	hurt.en[0][3] = 90
 	hurt.en[0][9] = true
@@ -117,8 +118,11 @@ func _ready() -> void:
 	host.snap.en = [enemy]
 	for i in 20:
 		audio.tick(0.1)
-	check(audio.boss_music.volume_db > -20 and audio.night_amb.volume_db > -20, "night and boss layers fade in")
-	check(audio.get_child_count() == 47, "event playback does not allocate additional audio players")
+	check(audio.current_music == "boss" and audio.music_voices[audio.music_target].volume_db > -20 and audio.ambient.amb_night.volume_db > -20, "boss score replaces night music while island ambience continues")
+	var voice_count := audio.get_child_count()
+	check(voice_count == 56, "effect, channel, ambience and crossfade playback has a fixed player budget")
+	check_new_audio(audio)
+	check(audio.get_child_count() == voice_count, "all new interactions reuse the existing audio players")
 	var pause: PauseScreen = load("res://ui/menu/pause_screen.tscn").instantiate()
 	host.add_child(pause)
 	pause.setup(host)
@@ -156,3 +160,102 @@ func _ready() -> void:
 	await get_tree().process_frame
 	print("SOUND ALL OK: %d checks" % checks if not failed else "SOUND FAILED")
 	get_tree().quit(1 if failed else 0)
+
+func check_new_audio(audio: Sound) -> void:
+	var base := snapshot()
+	for setup_ in [["",1,"menu"],["lobby",1,"menu"],["day",1,"day"],["dusk",2,"night_early"],
+		["night",1,"night_early"],["night",2,"night_early"],["night",3,"night_late"],
+		["night",4,"night_late"],["night",5,"final"]]:
+		var data := base.duplicate(true)
+		data.ph = setup_[0]
+		data.k = setup_[1]
+		check(Sound.music_for(data) == setup_[2], "music direction: %s / %s selects %s" % setup_)
+	for won in [false, true]:
+		var data := base.duplicate(true)
+		data.ph = "result"
+		data.result = [won, "", 5]
+		check(Sound.music_for(data) == ("win" if won else "loss"), "result screen selects its own one-shot score")
+	var data := base.duplicate(true)
+	data.ph = "night"
+	data.en = [[100,GameSim.BOSS,Vector2.ZERO,100,100,32,0,"",0,false,false,false]]
+	check(Sound.music_for(data) == "boss", "boss presence overrides the normal night score")
+	data.en.clear()
+	check(Sound.music_for(data) == "night_early", "boss death restores the correct night score")
+	# Two identical active-swing snapshots still contain two distinct attack events.
+	var exact := base.duplicate(true)
+	exact.audio = [[1,"bow",Vector2.ZERO,1]]
+	audio.last_event_sequence = 0
+	host.clock += 1
+	host.snap = base
+	audio.from_snap(exact)
+	var first_voice := audio.flat_next
+	check(audio.sound_last.has("bow") and audio.last_event_sequence == 1, "authoritative bow shot is heard")
+	host.clock += 1
+	audio.from_snap(exact)
+	check(audio.flat_next == first_voice, "repeated snapshot never replays a consumed event")
+	exact.audio.append([2,"bow",Vector2.ZERO,1])
+	host.clock += 1
+	audio.from_snap(exact)
+	check(audio.sound_last.bow == host.clock and audio.last_event_sequence == 2, "next attack is heard even if the animation boolean remains true")
+	exact.audio.append([3,"craft_done",Vector2.ZERO,1])
+	host.clock += 1
+	audio.from_snap(exact)
+	check(audio.sound_last.craft_done == host.clock, "successful craft completion comes from its actual event")
+	var crafting := base.duplicate(true)
+	crafting.audio = []
+	crafting.ps[1][26] = 8
+	crafting.ps[1][27] = .99
+	var cancelled := base.duplicate(true)
+	cancelled.audio = []
+	host.snap = crafting
+	audio.sound_last.erase("craft_done")
+	audio.from_snap(cancelled)
+	check(not audio.sound_last.has("craft_done"), "late craft cancellation never plays a false completion sound")
+	# Critical world/quest feedback is independent of visibility and text wording.
+	var changed := base.duplicate(true)
+	changed.doors[0] = 0
+	event(base, changed, "breach")
+	changed = base.duplicate(true)
+	changed.rescue = [[1,0,0],false,0.,[0,0,0]]
+	event(base, changed, "part_found")
+	var repaired := changed.duplicate(true)
+	repaired.rescue = [[1,1,1],true,0.,[1,1,1]]
+	event(changed, repaired, "radio_online")
+	var tower := base.duplicate(true)
+	tower.tw = [[0,Vector2.ZERO,300,false,false,Vector2.ZERO]]
+	changed = tower.duplicate(true)
+	changed.tw[0][2] = 0
+	event(tower, changed, "tower_break")
+	var closed := base.duplicate(true)
+	closed.sup = [[7,Vector2.ZERO,false,5,false,0.,0.]]
+	changed = closed.duplicate(true)
+	changed.sup[0][4] = true
+	event(closed, changed, "chest_unlock")
+	for activity in ["repair", "revive", "loot", "craft"]:
+		var channel := base.duplicate(true)
+		channel.ps[1][22] = activity
+		channel.ps[1][33] = 7 if activity == "loot" else -1
+		channel.ps[1][26] = 8 if activity == "craft" else -1
+		host.snap = channel
+		audio.tick(.1)
+		check(audio.channels[0].playing and audio.channel_names[0] != "", activity + " starts its contextual channel audio")
+		host.snap = base
+		audio.tick(.1)
+		check(audio.channels.all(func(p): return not p.playing), activity + " audio stops immediately on interruption")
+	host.snap = base.duplicate(true)
+	host.snap.ps[1][22] = "repair"
+	audio.tick(.1)
+	host.pause_menu.paused = true
+	audio.tick(.1)
+	check(audio.channels.all(func(p): return not p.playing), "pause immediately stops action loops")
+	host.pause_menu.paused = false
+	host.snap = base
+	# Submitting many inaudible cues must not create players or consume the voice pool.
+	var next := audio.world_next
+	for i in range(200):
+		audio.sfx("hit",Vector2(100000,0))
+	check(audio.world_next == next, "large distant battles are culled before voice allocation")
+	var sim := GameSim.new()
+	for i in range(200):
+		SimAudio.emit(sim,"bow",Vector2.ZERO,1)
+	check(sim.audio_events.size() == SimAudio.MAX_EVENTS and sim.audio_events[-1][0] == 200, "simulation audio event history stays bounded and ordered")

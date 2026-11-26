@@ -304,8 +304,8 @@ static func give_or_drop(sim: GameSim, p) -> void:
 			var over: int = add_to(best.inv, "arrow", arrows_)
 			if over > 0:
 				player_drop(sim, best.pos, "arrow", over)
-		SimPlayers.note(sim, p, "Gave %s to %s" % [item_name(s[0]), best.name])
-		SimPlayers.note(sim, best, "%s gave you %s" % [p.name, item_name(s[0])])
+		SimPlayers.note(sim, p, "%s to %s" % [item_name(s[0]), best.name])
+		SimPlayers.note(sim, best, "%s: +%s" % [p.name, item_name(s[0])])
 		return
 	player_drop(sim, p.pos, s[0], s[1])
 	if arrows_ > 0:
@@ -314,6 +314,7 @@ static func give_or_drop(sim: GameSim, p) -> void:
 # Items dropped by players stay until someone picks them up with E (MEC-09).
 static func player_drop(sim: GameSim, pos, id, n) -> void:
 	sim.drops.append({"pos": pos, "item": id, "n": int(n), "ttl": -1.0, "player": true})
+	SimAudio.emit(sim, "item_drop", pos)
 
 # E next to a dropped item: picks up as much as fits. Returns true when there was something to pick up.
 static func pick_up(sim: GameSim, p) -> bool:
@@ -321,7 +322,7 @@ static func pick_up(sim: GameSim, p) -> bool:
 		if d.get("player", false) and d.pos.distance_to(p.pos) <= 1.2 * T:
 			var left: int = add_to(p.inv, d.item, int(d.n))
 			if left == int(d.n):
-				SimPlayers.note(sim, p, "Inventory full")
+				SimPlayers.note(sim, p, "Bag full")
 				return true
 			d.n = left
 			sim.drops = sim.drops.filter(func(x): return x.n > 0)

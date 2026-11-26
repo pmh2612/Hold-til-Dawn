@@ -100,6 +100,40 @@ func _ready() -> void:
 	press(game, KEY_C)
 	check(game.craft_open and not game.craft_panel.radio_mode, "C at the workbench still opens ordinary recipes")
 	p.inv = SimInventory.empty_slots(8)
+	p.note = ""
+	p.note_t = 0
+	s.unlock = 0
+	refresh(game, p)
+	press(game, KEY_1)
+	check(p.craft_idx < 0 and p.note == "", "unaffordable craft shortcut stays disabled without a Need-materials message")
+	s.action(1, "craft", 0)
+	check(p.craft_idx < 0 and p.note == "", "a stale craft request is rejected silently without spending materials")
+	for id in GameSim.RES:
+		s.set_count(p, id, 20)
+	game.craft_panel.select_craft_tier(1)
+	refresh(game, p)
+	press(game, KEY_2)
+	check(p.craft_idx < 0 and p.note == "" and s.count(p, "wood") == 20, "locked-day recipe cannot be crafted by its shortcut even with enough materials")
+	s.unlock = 1
+	refresh(game, p)
+	press(game, KEY_2)
+	check(p.craft_idx == 2, "the same craft shortcut enables after its tier unlocks")
+	s.tick_craft(p, 3)
+	check(s.count(p, "bow") == 1 and s.count(p, "wood") == 14 and s.count(p, "titanium") == 18, "enabled recipe crafts normally and charges its material cost")
+	p.note = ""
+	p.note_t = 0
+	refresh(game, p)
+	press(game, KEY_5)
+	check(p.craft_idx < 0 and p.note == "" and s.count(p, "herb") == 20, "Engineer flask shortcut stays disabled silently despite sufficient materials")
+	p.role = 1
+	refresh(game, p)
+	press(game, KEY_5)
+	check(p.craft_idx == 13, "Healer flask shortcut enables at the unlocked workbench")
+	s.tick_craft(p, 3)
+	check(s.count(p, "healing_flask") == 1 and s.count(p, "herb") == 14 and s.count(p, "titanium") == 16, "Healer crafts one flask with the normal recipe cost")
+	p.role = 2
+	game.craft_panel.select_craft_tier(0)
+	p.inv = SimInventory.empty_slots(8)
 	s.set_count(p, "wood", 7)
 	s.set_count(p, "stone", 5)
 	refresh(game, p)

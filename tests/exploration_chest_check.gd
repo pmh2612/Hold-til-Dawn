@@ -25,19 +25,60 @@ func run() -> void:
 	var w = s.world
 	var seen = {}
 	var amounts = {}
+	var smallest_gap: float = INF
+	var layouts: Array = []
+	var longest_placement_ms: int = 0
+	var most_coastal: int = 0
 	check(w.lm_at.keys().filter(func(id): return id != 1).size() == 17, "all 17 expedition and farm landmarks remain built outside the outpost")
 	var resource_positions = Array(s.nodes.map(func(n): return Vector2(n.get("pos")))).duplicate()
+	var excluded_loot = ["bandage", "light_armour", "stone_armour", "titanium_armour", "healing_flask", "repair_kit"]
+	check(GameSim.CHEST_SUPPORT.size() == 4 and ["revive", "vine_trap", "poison_flask", "haste_tonic"].all(func(id): return GameSim.CHEST_SUPPORT.has(id)), "chest support pool contains only revival kits, traps, poison and haste")
 	for seed_ in range(64):
 		s.rng.seed = seed_
+		var started: int = Time.get_ticks_msec()
 		s.place_supplies()
+		longest_placement_ms = maxi(longest_placement_ms, Time.get_ticks_msec() - started)
 		if s.exploration_chests.size() != 20 or s.exploration_chests.filter(func(c): return c.landmark == 0).size() != 10 or s.exploration_chests.filter(func(c): return c.landmark > 4).size() != 10 or Cs.group_by(s.exploration_chests.filter(func(c): return c.landmark != 0), func(c): return c.landmark).any(func(g): return g.size() != 1 or g.key <= 4):
 			Cs.fail("Expected ten distinct remote landmark chests and ten scattered chests")
 			return
+		var regions = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+		var scattered_regions = regions.duplicate()
+		var positions: Array = []
+		var coastal: int = 0
+		for c in s.exploration_chests:
+			if IslandMap.depth(c.pos) <= 10 * GameSim.T:
+				coastal += 1
+			# Compute the region independently of the placement helper.
+			var fraction: Vector2 = (c.pos - IslandMap.box.position) / IslandMap.box.size
+			var region: int = clampi(int(fraction.y * 3), 0, 2) * 3 + clampi(int(fraction.x * 3), 0, 2)
+			regions[region] += 1
+			if c.landmark == 0:
+				scattered_regions[region] += 1
+			positions.append([c.pos.x, c.pos.y, c.landmark])
+			for other in s.exploration_chests:
+				if other.id <= c.id:
+					continue
+				var gap: float = c.pos.distance_to(other.pos)
+				smallest_gap = minf(smallest_gap, gap)
+				if gap < 20 * GameSim.T:
+					Cs.fail("Seed %d: chests %d / %d are only %.2f tiles apart" % [seed_, c.id, other.id, gap / GameSim.T])
+					return
+		if regions.any(func(count_): return count_ < 2 or count_ > 3) or scattered_regions.any(func(count_): return count_ < 1):
+			Cs.fail("Seed %d: island coverage is uneven: %s; scattered %s" % [seed_, regions, scattered_regions])
+			return
+		if coastal > 3:
+			Cs.fail("Seed %d: %d coastal chests exceeds the limit of three" % [seed_, coastal])
+			return
+		most_coastal = maxi(most_coastal, coastal)
+		layouts.append({"seed": seed_, "counts": regions, "coastal": coastal, "positions": positions})
 		var parts = Array(s.exploration_chests.filter(func(c): return c.component >= 0)).duplicate()
 		if parts.size() != 3 or Cs.distinct(parts.map(func(c): return c.component)).size() != 3 or Cs.distinct(parts.map(func(c): return c.id)).size() != 3:
 			Cs.fail("Radio parts must belong to three distinct chests")
 			return
 		for c in s.exploration_chests:
+			if excluded_loot.any(func(id): return SimInventory.count_in(c.slots, id) > 0):
+				Cs.fail("Removed armour, medicine or repair loot spawned in seed %d chest %d" % [seed_, c.id])
+				return
 			if not IslandMap.on_land(c.pos, 32) or not w.resolve_fast(c.pos, 26).is_equal_approx(c.pos) or Cs.has_point(w.weather_room.grow(48), c.pos) or IslandMap.in_bridge_approach(c.pos, 32):
 				Cs.fail("Chest obstructed, wet, inside the weather display or on a bridge approach")
 				return
@@ -74,6 +115,17 @@ func run() -> void:
 			Cs.fail("Locked contents leaked into the UI")
 			return
 	check(seen.size() == 15 and amounts.size() > 4, "64 seeds: 20 accessible eight-slot chests, ten named / ten scattered, parts visit all named sites and scattered chests")
+	check(smallest_gap >= 20 * GameSim.T, "64 seeds: every chest pair stays at least twenty tiles apart")
+	check(layouts.size() == 64, "64 seeds: all nine island regions have two or three chests and at least one scattered chest")
+	check(layouts.size() == 64 and most_coastal <= 3, "64 seeds: no more than three chests within ten tiles of the sea, including named sites and docks")
+	check(layouts.size() == 64, "64 seeds: no armour, bandage, healing flask or field repair kit in any chest")
+	# Same seed and world must produce the same plan, independent of previous chest placements.
+	s.rng.seed = 63
+	s.place_supplies()
+	check(s.exploration_chests.map(func(c): return [c.pos.x, c.pos.y, c.landmark]) == layouts[-1].positions, "same seed reproduces the complete regional chest plan")
+	DirAccess.make_dir_recursive_absolute("res://.tmp")
+	FileAccess.open("res://.tmp/chest-layout-after.json", FileAccess.WRITE).store_string(JSON.stringify(layouts))
+	print("CHEST DISTRIBUTION: minimum %.2f tiles; coastal maximum %d; slowest placement %d ms" % [smallest_gap / GameSim.T, most_coastal, longest_placement_ms])
 	check(s.exploration_chests.all(func(c): return not c.opened), "walking near a chest never unlocks or collects it")
 	var p = s.players[1]
 	var q = s.players[2]
@@ -252,8 +304,9 @@ func run() -> void:
 	check(s.phase == "result" and not s.result[0], "night 5 enforces the radio deadline")
 	s.start_match()
 	check(not s.radio_built and s.supplies_got() == 0 and s.radio_parts_placed.count(1) == 0 and s.exploration_chests.all(func(c): return not c.opened), "new match resets the radio table and rerolls sealed chests")
-	var allowed = ["light_armour", "stone_armour", "titanium_armour", "bandage", "revive", "base", "healing_flask", "repair_kit", "gathering_kit", "crafting_kit", "chest_key"]
-	check(allowed.all(func(id): return GameSim.RECIPES.any(func(r): return Cs.s(r[3]) == id)), "armour, medicine, maintenance and workshop kits and keys are craftable")
+	var allowed = ["light_armour", "stone_armour", "titanium_armour", "bandage", "revive", "base", "healing_flask", "repair_kit", "chest_key"]
+	check(allowed.all(func(id): return GameSim.RECIPES.any(func(r): return Cs.s(r[3]) == id)), "armour, medicine, maintenance and keys remain craftable")
+	check(["gathering_kit", "crafting_kit"].all(func(id): return not GameSim.ITEMS.has(id) and not GameSim.CHEST_SUPPORT.has(id) and not GameSim.RECIPES.any(func(r): return r[3] == id)), "gathering and crafting kits have no item, recipe or chest loot entry")
 	check(["haste_tonic", "poison_flask", "vine_trap"].all(func(id): return not GameSim.RECIPES.any(func(r): return Cs.s(r[3]) == id)), "speed, poison and traps remain loot only")
 	q.pos = GameSim.WORKBENCH_POS + Vector2(0, 24)
 	q.inv = SimInventory.empty_slots(8)
@@ -265,11 +318,15 @@ func run() -> void:
 	s.set_count(q, "wood", 1)
 	s.finish_craft(q, 0)
 	check(s.count(q, "arrow") == 5, "arrows are crafted separately and load into the empty bow")
-	s.set_count(q, "crafting_kit", 1)
-	check(is_equal_approx(s.player_craft_duration(q, 0), 2.4), "carried workshop kit reduces crafting time twenty percent")
-	s.set_count(q, "crafting_kit", 2)
-	check(is_equal_approx(s.player_craft_duration(q, 0), 2.4), "workshop kit speed does not stack")
+	check(is_equal_approx(s.player_craft_duration(q, 0), 3.0) and is_equal_approx(s.player_craft_duration(q, 10), 5.0), "crafting uses normal three-second recipes and five-second base repairs")
 	s.base_hp = 500
 	s.set_count(q, "stone", 5)
 	s.finish_craft(q, 10)
 	check(s.base_hp == 600 and s.count(q, "stone") == 0, "restored generator repair really restores HP and spends stone")
+	q.role = 0
+	q.inv = SimInventory.empty_slots(8)
+	s.set_count(q, "wood", 2)
+	s.set_count(q, "stone", 2)
+	check(Bots.fetch_rescue_by_day(s, q, 0.05) and q.craft_idx >= 0 and GameSim.RECIPES[q.craft_idx][3] == "chest_key", "Scout bot still starts the chest key recipe after kit removal")
+	s.tick_craft(q, 3.0)
+	check(s.count(q, "chest_key") == 1 and s.count(q, "wood") == 0 and s.count(q, "stone") == 0, "bot chest key craft completes and spends the correct materials")

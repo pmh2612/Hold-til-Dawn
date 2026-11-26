@@ -100,6 +100,11 @@ func _ready() -> void:
 	check(Main.night_sight_radius(1) == 5 * GameSim.T and Main.night_sight_radius(0) > Main.night_sight_radius(2), "healer / engineer sight grows to five tiles; Scout keeps an advantage")
 	check(game.enemy_visible_at(p.pos + Vector2(4.9 * GameSim.T, 0)), "nearby enemies are visible to non-Scouts")
 	check(not game.enemy_visible_at(p.pos + Vector2(7.0 * GameSim.T, 0)), "distant enemies remain hidden outside night sight")
+	for role in range(3):
+		game.snap.ps[1][1] = role
+		check(game.enemy_visible_at(p.pos + Vector2(20 * GameSim.T, 0), GameSim.BOSS), "%s sees bosses beyond personal night sight" % GameSim.ROLES[role])
+		check(not game.enemy_visible_at(p.pos + Vector2(20 * GameSim.T, 0), GameSim.GRUNT), "%s still needs light to see distant ordinary enemies" % GameSim.ROLES[role])
+	game.snap.ps[1][1] = p.role
 	game.snap.ph = "day"
 	check(game.enemy_visible_at(p.pos + Vector2(20.0 * GameSim.T, 0)), "daytime enemy visibility is unchanged")
 

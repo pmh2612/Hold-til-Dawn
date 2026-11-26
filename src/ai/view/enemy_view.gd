@@ -61,7 +61,7 @@ func corpse_items(items) -> void:
 	var i: int = 0
 	while i < corpses.size():
 		# under anyone standing on the same spot
-		if main.enemy_visible_at(corpses[i].foot):
+		if main.enemy_visible_at(corpses[i].foot, corpses[i].type):
 			items.append([corpses[i].foot.y - 1.0, 12, i])
 		i += 1
 
@@ -77,8 +77,7 @@ func draw_corpse(i: int) -> void:
 func draw_telegraphs() -> void:
 	for tl in main.snap.get("tele", []):
 		var pos: Vector2 = Vector2(tl[0])
-		if not main.enemy_visible_at(pos):
-			continue
+		# Only bosses create these warnings; the whole team must see them beyond personal sight.
 		var r: float = float(tl[1])
 		var left: float = float(tl[2])
 		var kind = Cs.s(tl[3]) if tl.size() > 3 else "circle"
@@ -143,11 +142,11 @@ func draw_enemy(e, foot) -> void:
 			mod_ = mod_.darkened(0.35)
 		elif look == "shown":
 			mod_ = mod_.lerp(Color(0.8, 0.7, 1.0), 0.4)
-	# Modest contrast boost within sight, so non-Scouts can distinguish dark sprites at night.
+	# Bosses need extra contrast beyond personal light; ordinary enemies keep their usual night tint.
 	if main.snap.get("ph", "") == "night":
-		mod_ *= 1.5
+		mod_ *= 2.2 if ty == GameSim.BOSS else 1.5
 		mod_.a = 1.0
-	en_seen[key_] = [e[0], Cs.init(Fallen.new(), {"key": key_, "skin": skin, "s": s, "mod": ENEMY_TINT[ty], "foot": Vector2(foot)})]
+	en_seen[key_] = [e[0], Cs.init(Fallen.new(), {"key": key_, "skin": skin, "s": s, "mod": ENEMY_TINT[ty], "foot": Vector2(foot), "type": ty})]
 	if main.flash.has(e[0]):
 		mod_ = Color(2.0, 2.0, 2.0)
 	# attack frames: on each hit or spit (snapshot field 9); a boss holds the wind-up frame through its
@@ -168,7 +167,7 @@ func draw_enemy(e, foot) -> void:
 		if from >= 0 and now - from < main.anim.anim_length(skin, "attack"):
 			play = "attack"
 			play_t = now - from
-	main.player_view.char_(key_, skin, foot, null, s, mod_, false, "idle", play, play_t)
+	main.player_view.char_(key_, skin, foot, float(e[8]) if ty == GameSim.BOSS else null, s, mod_, play == "attack", "idle", play, play_t)
 	if e.size() > 10 and e[10]:
 		var at: Vector2 = Vector2(foot) - Vector2(0, size * s * 0.65)
 		main.draw_arc(at, 9.0, 0, TAU, 12, Color("DDD681"), 2.0)
@@ -217,6 +216,7 @@ func draw_boss_bar(c, cx) -> void:
 				main.diamond(c, Vector2(x, br.get_center().y), 8, NEON_PINK)
 
 class Fallen:
+	var type: int = -1
 	var key
 	var skin
 	var s: float = 0.0

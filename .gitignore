@@ -10,3 +10,4 @@ obj/
 
 # downloaded asset packs (raw, some licences forbid redistribution)
 .tmp/
+__pycache__/

@@ -55,7 +55,7 @@ func _ready() -> void:
 			for res in GameSim.RES:
 				game.sim.set_count(p, res, 20)
 			game.craft_panel.select_craft_tier(0 if name_ == "craft-basic" else 1 if name_ == "craft-stone" else 2)
-			game.craft_panel.craft_sel = 8 if name_ == "craft-basic" else 15 if name_ == "craft-stone" else 6
+			game.craft_panel.craft_sel = 8 if name_ == "craft-basic" else 14 if name_ == "craft-stone" else 6
 		game.craft_panel.radio_mode = radio_panel
 		game.craft_open = crafting or radio_panel
 		game.local_pos = p.pos

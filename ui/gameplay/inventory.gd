@@ -15,6 +15,7 @@ var fx_tex = {}
 const GOLD = Main.GOLD
 const INK = Main.INK
 const NEON_RED = Main.NEON_RED
+const RADIO_PART_EDGE = Color("F16A61")
 
 var main: Main
 
@@ -23,7 +24,7 @@ func _init(host: Main) -> void:
 
 func load_item_art() -> void:
 	for id in GameSim.ITEMS:
-		if id == "chest_key" or id == "crafting_kit":
+		if id == "chest_key":
 			continue  # native pixel icons below
 		# the Revival kit's art is named after the kit, its item id is the recipe's ("revive")
 		item_tex[id] = load(ITEM_ART + ("revival_kit" if id == "revive" else id) + ".png")
@@ -35,7 +36,7 @@ func load_item_art() -> void:
 # An item icon centred on a point, at a whole-number scale so the pixels stay square.
 func draw_item_icon(canvas, id, centre: Vector2, scale: float) -> void:
 	var item_id = Cs.s(id)
-	if item_id == "chest_key" or item_id == "crafting_kit":
+	if item_id == "chest_key":
 		ExplorationChestsUi.draw_workshop_icon(canvas, item_id, centre, scale)
 		return
 	var rescue: int = SimSupplies.rescue_kind(item_id)
@@ -144,8 +145,11 @@ func ui_captures_mouse() -> bool:
 	return bag_open or main.craft_open or main.build_menu.build_open or main.pause_menu.paused or main.gameplay_hud.help_open
 
 func draw_slot(c, r: Rect2, s, selected: bool, key_) -> void:
-	c.draw_rect(r, Color(0.05, 0.06, 0.09, 0.85))
-	c.draw_rect(r, GOLD if selected else Color(1, 1, 1, 0.18), false, 2.0 if selected else 1.0)
+	var radio_part: bool = s != null and GameSim.COMPONENT_IDS.has(Cs.s(s[0]))
+	c.draw_rect(r, Color("351E26") if radio_part else Color(0.05, 0.06, 0.09, 0.85))
+	c.draw_rect(r, RADIO_PART_EDGE if radio_part else GOLD if selected else Color(1, 1, 1, 0.18), false, 3.0 if radio_part else 2.0 if selected else 1.0)
+	if radio_part:
+		c.draw_rect(r.grow(-4), Color(RADIO_PART_EDGE, 0.3), false, 1)
 	if key_ != "":
 		main.text(c, r.position + Vector2(3, 10), key_, 9, Color(1, 1, 1, 0.5))
 	if s == null:
@@ -220,10 +224,10 @@ func draw_bag(c, vs, me) -> void:
 	c.draw_rect(frame_, Color("10151C"))
 	c.draw_rect(frame_, GOLD, false, 1.5)
 	main.text(c, all.position + Vector2(0, -14), "YOUR BAG", 11, GOLD, 0, -1.0, true)
-	main.text(c, Vector2(frame_.position.x, all.end.y + 28), "Drag items to take / store   |   Tab close", 10, Color(1, 1, 1, 0.6), 1, frame_.size.x)
+	main.text(c, Vector2(frame_.position.x, all.end.y + 28), "Drag: transfer | Tab: close", 10, Color(1, 1, 1, 0.6), 1, frame_.size.x)
 	if slots.size() > GameSim.INV_SLOTS:
 		var first: Rect2 = Rect2(slots[GameSim.INV_SLOTS][2])
-		main.text(c, first.position + Vector2(0, -14), "ISLAND CHEST (8 slots)" if main.exploration_chests.bag_exploration_chest >= 0 else "BASE STORAGE (shared)", 11, GOLD, 0, -1.0, true)
+		main.text(c, first.position + Vector2(0, -14), "CHEST" if main.exploration_chests.bag_exploration_chest >= 0 else "SHARED STORAGE", 11, GOLD, 0, -1.0, true)
 	var sto = main.exploration_chests.exploration_chest_slots() if main.exploration_chests.bag_exploration_chest >= 0 else main.snap.get("sto", [])
 	var mouse: Vector2 = Vector2(main.hud.get_local_mouse_position())
 	for s in slots:

@@ -93,32 +93,31 @@ static func key_of(i: int) -> Variant:
 	return Cs.s(n % 10)
 
 func craft_seconds(r) -> float:
-	var me = main.snap.get("ps", {}).get(main.my_id, null)
-	return (float(r[4]) / 20.0 if r[3] == "base" else GameSim.CRAFT_TIME) * (0.8 if me != null and InventoryUi.carried(me, "crafting_kit") > 0 else 1.0)
+	return float(r[4]) / 20.0 if r[3] == "base" else GameSim.CRAFT_TIME
 
 func craft_tag(id) -> Variant:
 	if SimSupplies.rescue_kind(id) >= 0:
-		return "RESCUE - TEAM EQUIPMENT"
+		return "RESCUE"
 	if id == "revive":
 		return "TEAM"
 	elif id == "base":
-		return "BASE  -  ENGINEER ONLY"
+		return "BASE"
 	elif id == "bandage":
 		return "HEALING"
+	elif id == "healing_flask":
+		return "HEALER"
 	elif id == "arrow":
 		return "AMMO"
 	var kind = SimInventory.kind_of(id)
 	if kind == "weapon":
-		return "WEAPON  -  RANGED" if GameSim.WEAPON_STATS[id][3] else "WEAPON  -  MELEE"
+		return "RANGED" if GameSim.WEAPON_STATS[id][3] else "MELEE"
 	return kind.to_upper()
 
 # one short line of numbers
 func craft_desc(id) -> Variant:
 	var out = []
 	if SimSupplies.rescue_kind(id) >= 0:
-		out.append("Required for the rescue helicopter")
-		out.append("Craft by day. Installed for the whole team.")
-		out.append("Find radio parts in any island chest.")
+		out.append("3 parts: island chests")
 		return out
 	var tactical = SimTacticalItems.tactical_description(id)
 	if tactical.size() > 0:
@@ -126,9 +125,9 @@ func craft_desc(id) -> Variant:
 	if GameSim.WEAPON_STATS.has(id):
 		var s = GameSim.WEAPON_STATS[id]
 		var ranged: bool = s[3]
-		out.append(num(s[0]) + " damage, " + num(s[1]) + "/s, " + ("range " if ranged else "reach ") + num(s[2]))
+		out.append("DMG " + num(s[0]) + " | " + num(s[1]) + "/s | " + ("Range " if ranged else "Reach ") + num(s[2]))
 		if id == "bow":
-			out.append("No arrows included. Craft ammunition separately.")
+			out.append("Craft arrows separately")
 		return out
 	var k: int = 1
 	while k < GameSim.ARMOUR_ITEMS.size():
@@ -139,40 +138,43 @@ func craft_desc(id) -> Variant:
 	if id == "bandage":
 		out.append("Q: +30 HP")
 	elif id == "revive":
-		out.append("Hold E on a dead teammate")
+		out.append("Hold E: revive dead ally")
 	elif id == "base":
-		out.append("+100 generator HP, by day")
+		out.append("+100 base HP | Day only")
 	return out
 
 # why this recipe cannot be crafted right now ("" = it can), the same rules as GameSim.CanCraft
 func craft_block(me, i: int) -> Variant:
+	if me == null or int(me[5]) != 0:
+		return "Unavailable"
 	var r = GameSim.RECIPES[i]
 	var id = Cs.s(r[3])
 	var tier: int = int(r[2])
 	var radio = main.snap.get("rescue", null)
 	if radio != null and float(radio[2]) > 0 and Cs.s(me[22]) == "craft" and int(me[26]) < 0:
-		return "Finish repairing the radio first"
+		return "Radio repair in progress"
 	if tier != 3 and tier > main.snap.get("unlock", 0):
-		return "Unlocks after night 1" if tier == 1 else "Unlocks after the first boss"
-	if r[5] and me[1] != 2:
-		return "Only an Engineer can do this"
+		return "Clear night 1" if tier == 1 else "Defeat first boss"
+	var role: int = SimPlayers.craft_role(r)
+	if role >= 0 and int(me[1]) != role:
+		return "%s only" % GameSim.ROLES[role]
 	if SimInventory.kind_of(id) == "armour" and GameSim.ARMOUR_ITEMS.find(id) <= int(me[9]):
 		return "Already worn"
 	if id == "base":
 		if main.snap.get("ph", "") == "night":
-			return "The generator can only be repaired by day"
+			return "Day only"
 		if main.snap.get("base", 0.0) >= float(GameSim.BASE_HP):
-			return "The generator is at full HP"
+			return "Generator full"
 	for res in r[1]:
 		var need: int = int(r[1][res])
 		var have: int = main.survival_feedback.craft_have_local(me, Cs.s(res))
 		if have < need:
-			return "Need %d more %s" % [need - have, SimInventory.item_name(res)]
+			return "Need %d %s" % [need - have, SimInventory.item_name(res)]
 	if not main.inventory.at_bench_local(me):
-		return "Walk to the workbench to craft"
+		return "Move to workbench"
 	var busy: int = int(me[26])
 	if busy >= 0 and busy != i:
-		return "Already making %s" % [GameSim.RECIPES[busy][0]]
+		return "Crafting in progress"
 	return ""
 
 # --- drawing ---------------------------------------------------------------
@@ -201,7 +203,7 @@ func draw_craft_panel(c, vs) -> void:
 		var open: bool = t == 3 or t <= main.snap.get("unlock", 0)
 		c.draw_rect(tab, Color(0.35, 0.29, 0.14, 0.95) if craft_tier == t else Color(0.08, 0.09, 0.12, 0.9))
 		c.draw_rect(tab, GOLD if craft_tier == t else Color(1, 1, 1, 0.2), false, 1.0)
-		main.text(c, Vector2(tab.position.x, tab.position.y + 18), ("BASIC" if t == 0 else "STONE" if t == 1 else "TITANIUM") + ("" if open else " [locked]"), 11, GOLD if open else Color.GRAY, 1, tab.size.x, true)
+		main.text(c, Vector2(tab.position.x, tab.position.y + 18), "BASIC" if t == 0 else "STONE" if t == 1 else "TITANIUM", 11, GOLD if open else Color.GRAY, 1, tab.size.x, true)
 	var busy: int = int(me[26])
 	for i in range(GameSim.RECIPES.size()):
 		if int(GameSim.RECIPES[i][2]) == craft_tier:
@@ -261,17 +263,17 @@ func radio_block(me) -> String:
 	if rescue[1]:
 		return "Radio online"
 	if int(me[5]) != 0:
-		return "Cannot repair right now"
+		return "Cannot repair"
 	if not main.inventory.in_base_local(me) or not SimWorld.near_radio(Vector2(main.local_pos)):
-		return "Walk to the radio"
+		return "Move to radio"
 	if main.snap.get("ph", "") != "day":
-		return "Repair by day, before night 5"
+		return "Day only"
 	if rescue[3].count(1) < 3:
-		return "Find all 3 components"
+		return "Parts needed: %d" % [3 - rescue[3].count(1)]
 	if float(rescue[2]) > 0:
-		return "Repair in progress"
+		return "Repairing"
 	if int(me[26]) >= 0 or float(me[13]) > 0 or float(me[31]) > 0:
-		return "Finish the current action first"
+		return "Busy"
 	return ""
 
 func repair_radio() -> void:
@@ -298,11 +300,9 @@ func draw_radio_panel(c, vs: Vector2, me) -> void:
 		c.draw_rect(card, Color("7FD38A") if placed else Color("50565E"), false, 1.5)
 		SuppliesView.draw_component_icon(c, i, card.position + Vector2(cw / 2, 42), 3)
 		main.text(c, card.position + Vector2(0, 94), GameSim.SUPPLY_NAMES[i], 11, Color.WHITE, 1, cw)
-		main.text(c, card.position + Vector2(0, 121), "INSTALLED" if placed else "MISSING", 11, Color("7FD38A") if placed else Color("A0A6AD"), 1, cw, true)
-	main.text(c, p.position + Vector2(20, 262), "%d / 3 COMPONENTS" % [rescue[3].count(1)], 14, GOLD, 0, -1, true)
-	main.text(c, p.position + Vector2(20, 290), "Find the missing parts in island chests.", 11, Color.WHITE)
-	main.text(c, p.position + Vector2(20, 310), "Collected parts are installed when you open this panel.", 11, Color.WHITE)
-	main.text(c, p.position + Vector2(20, p.size.y - 28), "Repair before night 5 to arrange the rescue.", 11, GOLD)
+	main.text(c, p.position + Vector2(20, 262), "%d / 3 PARTS" % [rescue[3].count(1)], 14, GOLD, 0, -1, true)
+	main.text(c, p.position + Vector2(20, 290), "Parts: island chests", 11, Color.WHITE)
+	main.text(c, p.position + Vector2(20, p.size.y - 28), "Deadline: night 5", 11, GOLD)
 	var d = craft_detail(p)
 	c.draw_line(Vector2(d.position.x - 12, d.position.y), Vector2(d.position.x - 12, d.end.y), Color(1, 1, 1, 0.15), 1)
 	var icon = Rect2(d.position, Vector2(96, 96))
@@ -310,18 +310,15 @@ func draw_radio_panel(c, vs: Vector2, me) -> void:
 	c.draw_rect(icon, GOLD, false, 1.5)
 	SuppliesView.draw_supply_icon(c, 0, icon.get_center(), 4)
 	main.text(c, d.position + Vector2(110, 23), "Locator radio", 17, Color.WHITE, 0, -1, true)
-	main.text(c, d.position + Vector2(110, 43), "RESCUE EQUIPMENT", 11, GOLD)
-	main.text(c, d.position + Vector2(0, 132), "3 components  +  5 seconds", 13, GOLD)
-	main.text(c, d.position + Vector2(0, 159), "Press E once to start repairing.", 11, Color.WHITE)
-	main.text(c, d.position + Vector2(0, 180), "Stay still until the radio is ready.", 11, Color.WHITE)
-	main.text(c, d.position + Vector2(0, 201), "Moving or taking damage interrupts repairs.", 11, Color.WHITE)
+	main.text(c, d.position + Vector2(0, 132), "Repair: 5s | Day only", 13, GOLD)
+	main.text(c, d.position + Vector2(0, 159), "Stay still; damage cancels", 11, Color.WHITE)
 	var b = craft_button(vs)
 	var progress: float = float(rescue[2])
 	var blocked: String = radio_block(me)
 	c.draw_rect(b, GOLD if blocked == "" else Color("33383F"))
 	if progress > 0:
 		c.draw_rect(Rect2(b.position, Vector2(b.size.x * progress, b.size.y)), GOLD)
-	var label: String = "REPAIRING... %d%%" % [int(progress * 100)] if progress > 0 else "REPAIR RADIO  [E]" if blocked == "" else blocked.to_upper()
+	var label: String = "REPAIRING %d%%" % [int(progress * 100)] if progress > 0 else "E: REPAIR" if blocked == "" else blocked.to_upper()
 	main.text(c, b.position + Vector2(0, 25), label, 13, INK if blocked == "" else Color.WHITE, 1, b.size.x, true)
 
 func draw_craft_card(c, me, i: int, card: Rect2, mouse: Vector2, busy: int) -> void:
@@ -335,8 +332,15 @@ func draw_craft_card(c, me, i: int, card: Rect2, mouse: Vector2, busy: int) -> v
 	c.draw_rect(card, Color(0.14, 0.16, 0.21, 0.85) if hover else Color(0.05, 0.06, 0.09, 0.6))
 	c.draw_rect(card, GOLD if sel else Color(0.5, 0.85, 0.55, 0.55) if ready else Color(1, 1, 1, 0.15), false, 2.0 if sel else 1.0)
 	main.text(c, card.position + Vector2(5, 13), key_of(i), 10, Color(1, 1, 1, 0.55), 0, -1.0, true)
-	if r[5]:
+	var role: int = SimPlayers.craft_role(r)
+	if role == 2:
 		main.text(c, card.position + Vector2(0, 13), "ENG", 9, Color("F28C38"), 2, card.size.x - 5, true)
+	elif role == 1:
+		# Medical badge identifies the Healer without another instruction sentence.
+		var badge: Vector2 = card.position + Vector2(card.size.x - 13, 10)
+		c.draw_rect(Rect2(badge - Vector2.ONE * 7, Vector2.ONE * 14), Color("317B55"))
+		c.draw_rect(Rect2(badge - Vector2(2, 5), Vector2(4, 10)), Color("DDF2D6"))
+		c.draw_rect(Rect2(badge - Vector2(5, 2), Vector2(10, 4)), Color("DDF2D6"))
 	var icon = Vector2(card.get_center().x, card.position.y + 31)
 	c.draw_circle(icon, 22.0, Color(1, 1, 1, 0.02 if locked else 0.05))
 	main.inventory.draw_item_icon(c, id, icon, 2.0)
@@ -381,7 +385,7 @@ func draw_craft_detail(c, me, v: Vector2, d: Rect2, mouse: Vector2, busy: int) -
 		ly += 16
 	# how it is made: ingredients + ingredients -> result
 	var hy: float = d.position.y + 172
-	main.text(c, Vector2(d.position.x, hy), "HOW TO CRAFT", 11, GOLD, 0, -1.0, true)
+	main.text(c, Vector2(d.position.x, hy), "RECIPE", 11, GOLD, 0, -1.0, true)
 	var x: float = d.position.x
 	var y: float = hy + 12
 	var cost = r[1]
@@ -409,7 +413,7 @@ func draw_craft_detail(c, me, v: Vector2, d: Rect2, mouse: Vector2, busy: int) -
 	# The bow is crafted empty; ammunition is a separate recipe.
 	var count = "x" + str(n) if n > 1 and id != "base" else "+100" if id == "base" else ""
 	self.craft_box(c, Rect2(x, y, BOX, BOX), id, count, GOLD)
-	# the button, or why not
+	# Blocked recipes keep the same label; colour and input gating show availability.
 	var b: Rect2 = self.craft_button(v)
 	var why = self.craft_block(me, i)
 	if busy == i:
@@ -423,7 +427,7 @@ func draw_craft_detail(c, me, v: Vector2, d: Rect2, mouse: Vector2, busy: int) -
 	var hover: bool = can and b.has_point(mouse)
 	c.draw_rect(b, (GOLD.lightened(0.15) if hover else GOLD) if can else Color(0.2, 0.21, 0.25, 0.9))
 	c.draw_rect(b, INK if can else Color(1, 1, 1, 0.15), false, 1.0)
-	main.text(c, Vector2(b.position.x, b.position.y + 25), "CRAFT  [%s]" % [key_of(i)] if can else why.to_upper(), 13, INK if can else Color(1, 1, 1, 0.55), 1, b.size.x, true)
+	main.text(c, Vector2(b.position.x, b.position.y + 25), "CRAFT", 13, INK if can else Color(1, 1, 1, 0.55), 1, b.size.x, true)
 
 # one picture box of the recipe: an icon at 2x with its count in the corner
 func craft_box(c, r: Rect2, id, count, edge: Color) -> void:

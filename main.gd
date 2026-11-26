@@ -259,7 +259,7 @@ func _unhandled_input(input_event) -> void:
 		elif pause_menu.paused:
 			return
 		elif ev.physical_keycode == 66:
-			build_menu.note("T: place a tower")
+			build_menu.note("T: tower")
 		elif not build_menu.build_key(ev.physical_keycode):
 			gameplay_hud.gameplay_key(ev.physical_keycode)
 	elif ev is InputEventMouseButton and ev.pressed and ev.button_index in [4, 5]:
@@ -479,8 +479,10 @@ func _process(delta: float) -> void:
 static func night_sight_radius(role: int) -> float:
 	return (6.5 if role == 0 else 5.0) * T
 
-# Enemy visibility is separate from loot visibility. Nearby enemies and lit towers stay readable.
-func enemy_visible_at(pos: Vector2) -> bool:
+# Bosses are team threats, visible beyond personal night sight. Ordinary enemies still need light.
+func enemy_visible_at(pos: Vector2, enemy_type: int = -1) -> bool:
+	if enemy_type == GameSim.BOSS:
+		return true
 	if snap.get("ph", "") != "night":
 		return true
 	var me = snap.get("ps", {}).get(my_id)
@@ -556,7 +558,7 @@ func _draw() -> void:
 		anim_state.clear()
 	for e in snap.en:
 		var pos: Vector2 = Vector2(shown_e.get(e[0], e[2]))
-		if view.has_point(pos) and enemy_visible_at(pos):
+		if view.has_point(pos) and enemy_visible_at(pos, int(e[1])):
 			items.append([pos.y, 2, e, pos])
 	enemy_view.corpse_items(items)
 	for id in snap.ps:

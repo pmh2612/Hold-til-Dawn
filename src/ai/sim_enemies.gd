@@ -6,6 +6,9 @@ extends RefCounted
 static var ENEMY_SPEED_MUL: float = AiSettings.get_current().enemy_speed
 const ENEMY_NAVIGATION_LIMIT: int = 2
 const ROAM_SIGHT = 4.0 * T
+const GRUNT_ATTACK_INTERVAL: float = 1.0
+const SPITTER_ATTACK_INTERVAL: float = 1.25
+const WRECKER_ATTACK_INTERVAL: float = 1.25
 
 # constants shared with GameSim
 const BOSS = GameSim.BOSS
@@ -64,7 +67,7 @@ static func spawn_boss(sim: GameSim) -> void:
 	# the boss is the last enemy of the night's quota
 	e.quota = true
 	sim.night_spawned += 1
-	SimPlayers.say(sim, "%s is heading for door %s!" % [SimBosses.boss_title(e.kind).to_upper(), GameSim.DOOR_NAMES[door]])
+	SimPlayers.say(sim, "%s: door %s" % [SimBosses.boss_title(e.kind).to_upper(), GameSim.DOOR_NAMES[door]])
 
 static func boss(sim: GameSim) -> Variant:
 	for e in sim.enemies:
@@ -167,6 +170,16 @@ static func tick_enemy_bodies(sim: GameSim, dt) -> void:
 				if e.state == 4:
 					index += 1
 					continue
+		# Strike players in reach even while marching to a door or guarding a tower. Bosses used to
+		# have no basic player attack at all, leaving long idle gaps between their special moves.
+		var close_player = nearest_player(sim, e.pos, e.r + 0.55 * T)
+		if close_player != null:
+			if e.cd <= 0:
+				melee_attack(sim, e, close_player)
+			if e.type == BOSS:
+				SimBosses.boss_slam(sim, e, dt)
+			index += 1
+			continue
 		if e.state == 0 and sim.phase == "night":
 			var lit = SimTowers.tower_in_light(sim, e.pos)
 			if lit != null:
@@ -222,21 +235,36 @@ static func tick_enemy_bodies(sim: GameSim, dt) -> void:
 static func enemy_attack(sim: GameSim, e, p) -> void:
 	var boss_: bool = e.type == BOSS
 	if e.state == 1:
-		# a boss hurts players only with its slam and signature move
-		if not boss_:
-			if SimWorld.line_clear(sim, e.pos, p.pos):
-				SimPlayers.hurt(sim, p, e.dmg)
-				swung(sim, e)
-		e.cd = 2.0
+		melee_attack(sim, e, p)
 		return
 	if boss_ and (not SimBosses.boss_hits_doors(sim, e) or SimBosses.start_blow(sim, e)):
 		return
 	damage_door(sim, e, e.dmg)
-	e.cd = 4.0 if boss_ else 2.0
+	e.cd = attack_interval(e)
+
+static func attack_interval(e) -> float:
+	if e.type == BOSS:
+		return SimBosses.STRUCTURE_INTERVAL
+	return WRECKER_ATTACK_INTERVAL if e.type == WRECKER else GRUNT_ATTACK_INTERVAL
+
+static func melee_attack(sim: GameSim, e, p) -> bool:
+	if e.cd > 0 or p == null or p.state != 0 or p.inside and not SimPhases.any_breach(sim):
+		return false
+	if e.pos.distance_squared_to(p.pos) > pow(e.r + 0.55 * T, 2) or not SimWorld.line_clear(sim, e.pos, p.pos):
+		return false
+	if e.type == BOSS and e.get("act", "") != "":
+		return false
+	e.face = (p.pos - e.pos).angle()
+	SimPlayers.hurt(sim, p, SimBosses.boss_damage(sim, SimBosses.BASIC_DAMAGE) if e.type == BOSS else e.dmg)
+	e.cd = SimBosses.BASIC_INTERVAL if e.type == BOSS else attack_interval(e)
+	swung(sim, e)
+	return true
 
 # An enemy just struck (or spat): the snapshot flags it for 0.4 s so clients play its attack frames.
 static func swung(sim: GameSim, e) -> void:
 	e.swing = 0.4
+	var cue: String = "boss_swing" if e.type == BOSS else "spit" if e.type == SPITTER else "wrecker_atk" if e.type == WRECKER else "growl"
+	SimAudio.emit(sim, cue, e.pos, -int(e.id) - 1)
 
 # FML-07: a hit on an intact door also hurts the generator, more as the door degrades; through a broken
 # door the damage goes to the generator in full. Wreckers deal double damage to doors and towers.
@@ -268,13 +296,13 @@ static func tick_blocked(sim: GameSim, e, old_pos: Vector2, arrived, dt) -> void
 	if w != null:
 		swung(sim, e)
 		SimWalls.damage_wall(sim, e, w, e.dmg)
-		e.cd = 4.0 if e.type == BOSS else 2.0
+		e.cd = attack_interval(e)
 
 static func tower_attack(sim: GameSim, e, tw) -> void:
 	if e.type == BOSS and (not SimBosses.boss_hits_doors(sim, e) or SimBosses.start_blow(sim, e)):
 		return
 	damage_tower(sim, e, tw, e.dmg)
-	e.cd = 4.0 if e.type == BOSS else 2.0
+	e.cd = attack_interval(e)
 
 static func damage_tower(sim: GameSim, e, tw, dmg) -> void:
 	swung(sim, e)
@@ -292,7 +320,7 @@ static func enemy_near(sim: GameSim, pos, radius) -> Variant:
 	return false
 
 static func tick_spitter(sim: GameSim, e, dt) -> void:
-	var best = nearest_player(sim, e.pos, ROAM_SIGHT if e.state == 4 else 8.0 * T)
+	var best = nearest_player(sim, e.pos, ROAM_SIGHT if e.state == 4 else 8.0 * T, false)
 	var bd: float = best.pos.distance_to(e.pos) if best != null else INF
 	if best == null and e.state == 4:
 		SimRoamers.wander(sim, e, dt)
@@ -301,22 +329,22 @@ static func tick_spitter(sim: GameSim, e, dt) -> void:
 		if e.pos.distance_to(front) > 0.5 * T:
 			e.pos += (enemy_waypoint(sim, e, front) - e.pos).normalized() * e.spd * dt
 			e.pos = SimWorld.push_out(e.pos, e.r)
-	elif bd > 5.5 * T:
+	elif bd > 5.5 * T or not SimWorld.line_clear(sim, e.pos, best.pos):
 		e.pos += (enemy_waypoint(sim, e, best.pos) - e.pos).normalized() * e.spd * dt
 		e.pos = SimWorld.push_out(e.pos, e.r)
-	elif e.cd <= 0 and SimWorld.line_clear(sim, e.pos, best.pos):
-		e.cd = 2.0
+	elif e.cd <= 0:
+		e.cd = SPITTER_ATTACK_INTERVAL
 		swung(sim, e)
 		sim.proj.append({"pos": e.pos, "vel": (best.pos - e.pos).normalized() * 8 * T, "dmg": e.dmg, "ttl": 1.0})
 
-static func nearest_player(sim: GameSim, pos, radius) -> Variant:
+static func nearest_player(sim: GameSim, pos, radius, require_sight: bool = true) -> Variant:
 	var best = null
 	var bd = radius
 	for p in sim.players.values():
 		# an Engineer inside the base can only be reached through a broken door
 		if p.state == 0 and (not p.inside or SimPhases.any_breach(sim)):
 			var d: float = float(p.pos.distance_to(pos))
-			if d <= bd and SimWorld.line_clear(sim, pos, p.pos):
+			if d <= bd and (not require_sight or SimWorld.line_clear(sim, pos, p.pos)):
 				bd = d
 				best = p
 	return best

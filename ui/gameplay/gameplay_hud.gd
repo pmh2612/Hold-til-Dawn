@@ -9,9 +9,11 @@ const T = Main.T
 
 var main: Main
 var help_open: bool = false
+var keyboard_help: KeyboardHelpUi
 
 func _init(host: Main) -> void:
 	main = host
+	keyboard_help = KeyboardHelpUi.new(host)
 
 # Owner: Pham Minh Hieu. Gameplay widgets and keys plugged into the HUD shell of Main.cs:
 # context hints and gameplay key bindings.
@@ -23,7 +25,7 @@ func draw_interaction_hint(c, vs, me, ph) -> void:
 	var hint = me[16]
 	for job in main.snap.get("construction", []):
 		if job[2] == main.my_id:
-			hint = "Building tower: %.0f%% - stand still" % [float(job[1]) * 100]
+			hint = "Building %.0f%%" % [float(job[1]) * 100]
 	if hint == "" and main.build_menu.local_note_t > 0:
 		hint = main.build_menu.local_note
 	# a downed teammate, or a dead one (with a Revival kit in the bag)
@@ -35,7 +37,7 @@ func draw_interaction_hint(c, vs, me, ph) -> void:
 			if q[5] == 1:
 				hint = "E: revive"
 			else:
-				hint = "E: use Revival kit" if InventoryUi.carried(me, "revive") > 0 else "Needs a Revival kit"
+				hint = "E: revive (kit)" if InventoryUi.carried(me, "revive") > 0 else "Need revival kit"
 			break
 	# standing at the base furniture
 	if hint == "" and me[5] == 0:
@@ -54,7 +56,7 @@ func draw_interaction_hint(c, vs, me, ph) -> void:
 				hint = "Tower %d/%d" % [tw[2], tcap] + ("  |  E: repair" if tw[2] < tcap else "")
 				break
 		if hint == "" and main.free_tower_here():
-			hint = "T: choose tower position (6s build)"
+			hint = "T: tower"
 	if hint == "" and ph in ["day", "dusk"] and me[5] == 0:
 		for nd in main.snap.nodes:
 			if nd[2] > 0 and main.local_pos.distance_to(nd[1]) <= 1.5 * T:
@@ -70,7 +72,7 @@ func draw_interaction_hint(c, vs, me, ph) -> void:
 			if dur >= cap:
 				hint = ""
 			elif main.snap.broken[i] and main.snap.inside_en:
-				hint = "Clear the enemies inside first"
+				hint = "Enemies inside"
 			elif InventoryUi.carried(me, "wood") <= 0:
 				hint = "Need wood"
 			elif Input.is_physical_key_pressed(69):
@@ -82,7 +84,7 @@ func draw_interaction_hint(c, vs, me, ph) -> void:
 			break
 	if hint == "" and ph == "night" and me[1] == 2 and me[5] == 0:
 		if me[19]:
-			hint = "F at a door: leave"
+			hint = "F: leave at door"
 		else:
 			for i in 3:
 				if main.snap.doors[i] > 0 and main.local_pos.distance_to(GameSim.DOOR_POS[i]) <= 2.0 * T:
@@ -156,7 +158,9 @@ func gameplay_key(code) -> void:
 			var choices = main.craft_panel.craft_choices()
 			if n >= 0 and n < choices.size():
 				main.craft_panel.craft_sel = choices[n]
-				main.act("craft", main.craft_panel.craft_sel)
+				var me = main.snap.ps.get(main.my_id)
+				if main.craft_panel.craft_block(me, main.craft_panel.craft_sel) == "":
+					main.act("craft", main.craft_panel.craft_sel)
 		elif n >= 0 and n < GameSim.HOTBAR:
 			main.act("select", n)
 
@@ -174,18 +178,6 @@ func gameplay_right_click() -> void:
 	var use: bool = slot != null and SimTacticalItems.is_tactical_use(Cs.s(slot[0]))
 	main.act("use_item" if use else "flask", main.get_global_mouse_position())
 
-func draw_controls(c, vs: Vector2, me) -> void:
+func draw_controls(c, vs: Vector2, _me) -> void:
 	if help_open:
-		var box_ = Rect2((vs.x - 470) / 2, 92, 470, 310)
-		c.draw_rect(box_, Color("111820"))
-		c.draw_rect(box_, GOLD, false, 2)
-		main.text(c, box_.position + Vector2(16, 26), "CONTROLS - H / ESC to close", 16, GOLD)
-		for i in range(PauseMenuUi.CONTROLS.size()):
-			main.text(c, box_.position + Vector2(16, 57 + i * 25), PauseMenuUi.CONTROLS[i], 12, Color.WHITE)
-		return
-	if main.inventory.bag_open or main.build_menu.build_open:
-		return
-	var hint = "E interact  |  Tab bag  |  1-4 select  |  LMB use  |  M map  |  H help"
-	if me[1] == 2:
-		hint = "T place tower  |  Hold E repair / revive  |  Tab bag  |  M map  |  H help"
-	main.text(c, Vector2(0, vs.y - 8), hint, 10, Color("D9DCD3"), 1, vs.x)
+		keyboard_help.draw_guide(c, vs)

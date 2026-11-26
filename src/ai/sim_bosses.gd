@@ -5,9 +5,12 @@ extends RefCounted
 # Rules only: the match state lives on GameSim, passed in as `sim`.
 # [code, name, HP at night 2 for 4 players on Medium, speed x Grunt] (table 4.2, BAL-39)
 static var BOSS_KINDS = [["NOX-01", "Juggernaut", 3900.0, 1.0], ["NOX-02", "Broodmother", 4680.0, 0.75], ["NOX-03", "Bio-Cannon", 3510.0, 1.0], ["NOX-04", "Burrower", 3120.0, 1.0], ["NOX-05", "Gatebreaker", 4290.0, 1.0], ["NOX-06", "Phantom", 3120.0, 1.0], ["NOX-07", "Ironhide", 2730.0, 1.0]]
-const TELEGRAPH: float = 1.0  # every damaging boss move is shown 1.0 s before it hits (BAL-43)
+const TELEGRAPH: float = 1.0  # damaging special moves warn 1.0 s before impact; basic hits use the attack sprite
 const SIGNATURE_HIT: float = 35.0
 const MAX_SUMMONS: int = 4
+const BASIC_DAMAGE: float = 12.0
+const BASIC_INTERVAL: float = 1.2
+const STRUCTURE_INTERVAL: float = 2.0
 
 # constants shared with GameSim
 const BIO_CANNON = GameSim.BIO_CANNON
@@ -51,8 +54,8 @@ static func setup_boss(sim: GameSim, e, kind: int) -> void:
 	e.hp = b[2] * (1 + 0.8 * (sim.players.size() - 1)) / 3.4 * (1.5625 if sim.k == 4 else 1.0) * GameSim.MODE_MUL[sim.mode][1]
 	e.maxhp = e.hp
 	e.spd = e.spd * b[3]
-	# BAL-37: 60 door damage per 4 s (the Gatebreaker deals it as one 120-point blow every 8 s)
-	e.dmg = boss_damage(sim, 60.0)
+	# Smaller, more frequent structure hits preserve 15 base DPS. Gatebreaker's signature stays 120 / 8 s.
+	e.dmg = boss_damage(sim, 30.0)
 	e.slam = boss_damage(sim, 40.0)
 	e.slam_cd = 3.0
 	e.sig_cd = 4.0
@@ -85,6 +88,9 @@ static func boss_on_hit(sim: GameSim, e) -> void:
 static func boss_act(sim: GameSim, e, act, time: float) -> void:
 	e.act = act
 	e.act_t = time
+	var cue: String = {"charge": "boss_charge", "burrow": "boss_burrow", "climb": "boss_surface", "cloak": "boss_cloak", "ambush": "boss_ambush", "stagger": "boss_stagger"}.get(act, "")
+	if cue != "":
+		SimAudio.emit(sim, cue, e.pos, -int(e.id) - 1)
 
 # Whom the boss's signature move aims at: the player it retaliates against, else the nearest one it sees.
 static func boss_target(sim: GameSim, e) -> Variant:
@@ -99,6 +105,7 @@ static func add_telegraph(sim: GameSim, kind, pos: Vector2, r: float, dmg: float
 		for key in extra:
 			tl[key] = extra[key]
 	sim.tele.append(tl)
+	SimAudio.emit(sim, "boss_warn", pos)
 
 # BAL-38: a 40-damage slam of radius 3 every 6 s when a player is close; the boss stands still while it lands.
 static func boss_slam(sim: GameSim, e, dt) -> void:
@@ -172,6 +179,7 @@ static func finish_act(sim: GameSim, e, act) -> void:
 	var kind: int = int(e.kind)
 	boss_act(sim, e, "", 0.0)
 	if act == "slam":
+		SimAudio.emit(sim, "boss_slam", e.pos, -int(e.id) - 1)
 		# Juggernaut: 2 s recovery after the slam; Ironhide: 3 s stagger with full damage from every side
 		if kind == JUGGERNAUT and e.get("dashed", false):
 			e.dashed = false
@@ -181,8 +189,10 @@ static func finish_act(sim: GameSim, e, act) -> void:
 	elif act == "charge_wind":
 		boss_act(sim, e, "charge", 10.0)
 	elif act == "glow" and kind == BROODMOTHER:
+		SimAudio.emit(sim, "boss_summon", e.pos, -int(e.id) - 1)
 		summon(sim, e)
 	elif act == "glow" and kind == BIO_CANNON:
+		SimAudio.emit(sim, "boss_barrage", e.pos, -int(e.id) - 1)
 		# a ring of 8 projectiles with 45-degree gaps: 12 damage, 4 tiles/s, range 8 tiles
 		for i in range(8):
 			var dir: Vector2 = Vector2.from_angle(i * TAU / 8.0)

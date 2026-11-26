@@ -1,14 +1,15 @@
 extends SceneTree
 
-# Synthesised sound effects, ambience and music for src/audio/sound.gd. Not part of the game.
+# Legacy placeholder generator, retained for reference. Runtime uses art/audio/catalog.json and
+# tools/audio_assets.py. This script now writes only to the ignored comparison directory.
 # Run: godot --headless --path . --script tools/sound_gen.gd   (add -- --out=<dir> to write elsewhere)
-# Writes art/sfx/<name>.wav (16-bit mono, 22050 Hz). Loops (amb_*, music_*) carry a WAV "smpl" loop so the
+# Writes .tmp/legacy-audio/<name>.wav (16-bit mono, 22050 Hz). Loops (amb_*, music_*) carry a WAV "smpl" loop so the
 # importer loops them by itself. Same seed every run: regenerating gives the same files. The WAVs can be
 # replaced by recorded sounds of the same name.
 
 const RATE := 22050
 var rng := RandomNumberGenerator.new()
-var out_dir := "res://art/sfx"
+var out_dir := "res://.tmp/legacy-audio"
 
 
 func _init() -> void:

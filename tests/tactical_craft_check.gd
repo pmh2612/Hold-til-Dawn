@@ -73,7 +73,7 @@ func run() -> void:
 	sim.action(1, "start", 0)
 	p = sim.players[1]
 	ally = sim.players[2]
-	check(GameSim.RECIPES.size() == 18 and not GameSim.ITEMS.has("wood_shield"), "18 approved recipes, no shield")
+	check(GameSim.RECIPES.size() == 16 and not GameSim.ITEMS.has("wood_shield"), "16 approved recipes, no shield")
 	for i in range(GameSim.RECIPES.size()):
 		reset()
 		p.pos = GameSim.WORKBENCH_POS + Vector2(0, 24)
@@ -84,6 +84,13 @@ func run() -> void:
 		sim.base_hp = 500
 		for res in r[1]:
 			sim.set_count(p, res, r[1][res])
+		if id == "healing_flask":
+			for role in [0, 2]:
+				p.role = role
+				check(not sim.can_craft(p, i, false), GameSim.ROLES[role] + " cannot craft healing flasks")
+				sim.action(1, "craft", i)
+				check(p.craft_idx < 0 and sim.count(p, "herb") == 6 and sim.count(p, "titanium") == 2, "direct non-Healer craft request cannot spend flask materials")
+			p.role = 1
 		check(sim.can_craft(p, i, false), id + " affordable at correct tier")
 		if tier > 0:
 			sim.unlock = tier - 1
@@ -100,7 +107,17 @@ func run() -> void:
 		for res in r[1]:
 			check(sim.count(p, res) == 0, id + " spends " + Cs.s(res))
 		check(not (id == "haste_tonic" or id == "poison_flask" or id == "vine_trap"), id + " is allowed crafting")
-		check(id == "chest_key" or id == "crafting_kit" or ResourceLoader.exists("res://art/items/" + ("base_repair" if id == "base" else "revival_kit" if id == "revive" else id) + ".png"), id + " has native or imported icon")
+		check(id == "chest_key" or ResourceLoader.exists("res://art/items/" + ("base_repair" if id == "base" else "revival_kit" if id == "revive" else id) + ".png"), id + " has native or imported icon")
+	reset()
+	p.role = 1
+	p.pos = GameSim.WORKBENCH_POS + Vector2(0, 24)
+	sim.unlock = 1
+	give("herb", 6)
+	give("titanium", 2)
+	sim.craft(p, 13)
+	p.role = 2
+	sim.tick_craft(p, 3)
+	check(sim.count(p, "healing_flask") == 0 and sim.count(p, "herb") == 6 and sim.count(p, "titanium") == 2, "losing the Healer role before completion prevents flask output without charging materials")
 	reset()
 	give("haste_tonic", 2)
 	var normal_speed: float = sim.player_speed(p)
@@ -260,16 +277,11 @@ func run() -> void:
 	sim.action(1, "use_item", field)
 	check(sim.count(p, "haste_tonic") == 0 and sim.player_speed(p) > float(GameSim.SPEED), "hotbar use action consumes selected item")
 	reset()
-	give("gathering_kit", 2)
 	var node = sim.nodes[0]
 	node.amount = 5
 	p.pos = node.pos
 	sim.interact(p, 1.0)
-	check(absf(float(p.gather_acc) - 0.4375) < 0.001, "gathering kit reduces farm duration 20%, does not stack")
-	sim.set_count(p, "gathering_kit", 0)
-	p.gather_acc = 0.0
-	sim.interact(p, 1.0)
-	check(absf(float(p.gather_acc) - 0.35) < 0.001, "dropping gathering kit restores normal rate")
+	check(absf(float(p.gather_acc) - 0.35) < 0.001, "gathering uses its normal rate without speed kits")
 	reset()
 	give("haste_tonic")
 	sim.use_tactical_item(p, "haste_tonic", field)

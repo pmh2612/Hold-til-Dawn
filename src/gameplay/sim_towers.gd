@@ -23,19 +23,19 @@ const WALL_DOOR_GAP = GameSim.WALL_DOOR_GAP
 # right in front of a door. Returns "" when the spot is fine, else what is wrong.
 static func tower_spot_problem(pos: Vector2, world_) -> Variant:
 	if SimWorld.inside_base(pos, TOWER_R * T):
-		return "Towers go outside the base"
+		return "Build outside base"
 	for i in 3:
 		if pos.distance_to(Vector2(SimWorld.pad_pos(i))) < float(PAD_R) + TOWER_R * T:
-			return "Keep the landing pads clear"
+			return "Landing pad blocked"
 		if pos.distance_to(Vector2(GameSim.DOOR_POS[i])) < WALL_DOOR_GAP * T:
-			return "Too close to a door (3 tiles)"
+			return "Keep 3 tiles from door"
 	if not IslandMap.on_land(pos, TOWER_R * T):
-		return "Too close to the water"
+		return "Too close to water"
 	var ground = world_
 	if world_ is WorldGeometry and ground.terrain_at(pos, TOWER_R * T) == 1:
-		return "Needs dry land for the dirt foundation"
+		return "Need dry land"
 	if world_ != null and Vector2(world_.resolve(pos, TOWER_R * T)) != pos:
-		return "Something is in the way"
+		return "Spot blocked"
 	return ""
 
 # The first free tower slot, or -1 when all MAX_TOWERS are taken.
@@ -66,40 +66,40 @@ static func build_tower(sim: GameSim, p, at = null) -> void:
 	if not spot.is_finite() or not sim.phase in ["day", "dusk", "night"]:
 		return
 	if p.craft_idx >= 0 or p.channel > 0 or p.get("repair_kit_t", 0.0) > 0:
-		SimPlayers.note(sim, p, "Finish your current action first")
+		SimPlayers.note(sim, p, "Busy")
 		return
 	if p.role != 2 or p.state != 0 or p.inside:
 		SimPlayers.note(sim, p, "Engineer only")
 		return
 	if SimInventory.count(sim, p, "hammer") <= 0:
-		SimPlayers.note(sim, p, "Needs the hammer")
+		SimPlayers.note(sim, p, "Need hammer")
 		return
 	if spot.distance_to(p.pos) > BUILD_REACH * T:
-		SimPlayers.note(sim, p, "Too far away to build there")
+		SimPlayers.note(sim, p, "Out of reach")
 		return
 	# T places it at the Engineer's feet (they stand there already); from the build menu the spot must be free of people too
 	var why = tower_spot_problem(spot, sim.world if at != null else null)
 	if why == "" and at != null and sim.players.values().any(func(q): return q.pos.distance_to(spot) < 1.1 * T):
-		why = "Someone is standing there"
+		why = "Spot occupied"
 	if why == "" and sim.towers.any(func(tw): return tw != null and Vector2(tw.pos).distance_to(spot) < 2.0 * TOWER_R * T):
-		why = "Something is in the way"
+		why = "Spot blocked"
 	if why != "":
 		SimPlayers.note(sim, p, why)
 		return
 	var i: int = free_tower_slot(sim)
 	if i < 0:
-		SimPlayers.note(sim, p, "The team already has %d towers" % [MAX_TOWERS])
+		SimPlayers.note(sim, p, "Tower limit: %d" % [MAX_TOWERS])
 		return
 	if not sim.free_tower:
 		if sim.unlock < 2:
-			SimPlayers.note(sim, p, "Unlocks after the first boss")
+			SimPlayers.note(sim, p, "Defeat first boss")
 			return
 		for res in GameSim.TOWER_COST:
 			if SimInventory.count(sim, p, res) < GameSim.TOWER_COST[res]:
-				SimPlayers.note(sim, p, "A tower costs 10 wood + 5 titanium")
+				SimPlayers.note(sim, p, "Need 10 wood + 5 titanium")
 				return
 	if not SimConstruction.reserve_tower(sim, p, i, spot):
-		SimPlayers.note(sim, p, "Tower foundation is already reserved")
+		SimPlayers.note(sim, p, "Spot reserved")
 
 static func place_tower(sim: GameSim, slot, pos) -> void:
 	sim.towers[slot] = {"slot": slot, "pos": pos, "hp": TOWER_HP, "wrecked": false, "pause": 0.0, "target": null}

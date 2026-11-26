@@ -18,7 +18,7 @@ static func wall_spot_problem(pos, vert: bool, world_, walls_) -> Variant:
 			return "Walls go outside the base"
 		for i in 3:
 			if piece.distance_to(GameSim.DOOR_POS[i]) < WALL_DOOR_GAP * T:
-				return "Too close to a door (3 tiles)"
+				return "Keep 3 tiles from door"
 		if not IslandMap.on_grass(Vector2(piece), T):
 			return "Too close to the shore"
 		if world_.resolve(piece, 0.5 * T) != piece:
@@ -37,7 +37,7 @@ static func build(sim: GameSim, p, arg) -> void:
 	if kind == "tower":
 		SimTowers.build_tower(sim, p, pos)
 		return
-	SimPlayers.note(sim, p, "Wall construction removed. Press T to place a tower.")
+	SimPlayers.note(sim, p, "T: tower")
 
 static func player_on_wall(sim: GameSim, pos: Vector2, vert: bool) -> bool:
 	for piece in WorldGeometry.wall_pieces(pos, vert):

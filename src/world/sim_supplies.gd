@@ -7,6 +7,12 @@ static var RESCUE_IDS = ["locator_radio"]
 const SUPPLY_COUNT: int = 3
 const SUPPLY_PICK: float = 1.1
 const RADIO_BUILD_TIME: float = 5.0
+const CHEST_MIN_SPACING: float = 20.0 * GameSim.T
+const CHEST_REGIONS: int = 9
+const SCATTER_LANDMARK_CLEARANCE: float = 520.0
+# Count beaches and offshore pier decks too; river banks are not coastline.
+const CHEST_COAST_BAND: float = 10.0 * GameSim.T
+const CHEST_COAST_LIMIT: int = 3
 static var chest_prop_anchors = null
 
 # constants shared with GameSim
@@ -57,6 +63,12 @@ static func place_supplies(sim: GameSim) -> void:
 		var _t2 = places[i]
 		places[i] = _t1
 		places[j] = _t2
+	var regions = range(CHEST_REGIONS)
+	for i in range(regions.size() - 1, 0, -1):
+		var j: int = random.randi_range(0, i)
+		var old = regions[i]
+		regions[i] = regions[j]
+		regions[j] = old
 	var support = GameSim.CHEST_SUPPORT.duplicate()
 	for i in range(support.size() - 1, 0, -1):
 		var j: int = random.randi_range(0, i)
@@ -64,7 +76,9 @@ static func place_supplies(sim: GameSim) -> void:
 		var _t4 = support[i]
 		support[i] = _t3
 		support[j] = _t4
-	# Ten distinct remote landmarks, ten scattered sites; parts can be in any chest.
+	# Ten distinct landmarks, balanced across the island rather than taking the first ten shuffled sites.
+	# One scattered chest per geographic region; the tenth fills the least populated region.
+	# Parts can still be in any of the twenty chests.
 	var part_chests = range(20)
 	for i in range(19, 0, -1):
 		var j: int = random.randi_range(0, i)
@@ -72,13 +86,27 @@ static func place_supplies(sim: GameSim) -> void:
 		part_chests[i] = part_chests[j]
 		part_chests[j] = old
 	for i in range(20):
-		var c = Cs.init(ExplorationChest.new(), {"id": i, "landmark": places[i].id if i < 10 else 0, "pos": chest_spot(sim, places[i], random.randf_range(0, TAU)) if i < 10 else scattered_chest_spot(sim, random)})
+		var c = ExplorationChest.new()
+		c.id = i
+		if i < 10:
+			var counts = chest_region_counts(sim)
+			var choice: int = 0
+			for j in range(1, places.size()):
+				if counts[chest_region(sim.world.lm_at[places[j].id])] < counts[chest_region(sim.world.lm_at[places[choice].id])]:
+					choice = j
+			var landmark = places[choice]
+			places.remove_at(choice)
+			c.landmark = landmark.id
+			c.pos = chest_spot(sim, landmark, random.randf_range(0, TAU))
+		else:
+			var region: int = regions[i - 10] if i < 19 else least_populated_region(sim, regions)
+			c.pos = scattered_chest_spot(sim, random, region)
 		SimInventory.add_to(c.slots, "wood", random.randi_range(4, 10))
 		SimInventory.add_to(c.slots, "stone", random.randi_range(3, 8))
 		SimInventory.add_to(c.slots, "herb", random.randi_range(2, 5))
 		SimInventory.add_to(c.slots, "titanium", random.randi_range(1, 3))
-		# Guaranteed variety, one support stack per chest at most. Total loot fits the eight real slots.
-		if i < support.size() or random.randf() < 0.35:
+		# Named sites always get one support; scattered sites have a 35% chance. Eight slots suffice.
+		if i < 10 or random.randf() < 0.35:
 			SimInventory.add_to(c.slots, support[i % support.size()], 1)
 		var part: int = part_chests.find(i)
 		if part < 3:
@@ -86,19 +114,84 @@ static func place_supplies(sim: GameSim) -> void:
 			SimInventory.add_to(c.slots, GameSim.COMPONENT_IDS[part], 1)
 		sim.exploration_chests.append(c)
 
-static func scattered_chest_spot(sim: GameSim, random) -> Vector2:
-	var w = sim.world
-	for attempt in range(20000):
-		var at: Vector2 = (IslandMap.box.position + Vector2(random.randf(), random.randf()) * IslandMap.box.size).round()
-		var remote: bool = true
-		for id in w.lm_at:
-			var centre = w.lm_at[id]
-			if at.distance_squared_to(centre) < 520 * 520:
-				remote = false
-				break
-		if remote and chest_spot_free(sim, at, sim.chest_scenery):
-			return at
-	Cs.fail("No accessible scattered chest spot")
+static func chest_region(at: Vector2) -> int:
+	var local: Vector2 = (at - IslandMap.box.position) / IslandMap.box.size
+	return clampi(int(local.y * 3), 0, 2) * 3 + clampi(int(local.x * 3), 0, 2)
+
+static func chest_region_bounds(region: int) -> Rect2:
+	return Rect2(IslandMap.box.position + Vector2(region % 3, region / 3) * IslandMap.box.size / 3, IslandMap.box.size / 3)
+
+static func chest_region_counts(sim: GameSim) -> Array:
+	var counts = Cs.arr(CHEST_REGIONS, 0)
+	for chest in sim.exploration_chests:
+		counts[chest_region(chest.pos)] += 1
+	return counts
+
+static func least_populated_region(sim: GameSim, regions: Array) -> int:
+	var counts = chest_region_counts(sim)
+	var best: int = regions[0]
+	for region in regions:
+		if counts[region] < counts[best]:
+			best = region
+	return best
+
+static func nearest_chest_distance_squared(sim: GameSim, at: Vector2) -> float:
+	var distance: float = INF
+	for other in sim.exploration_chests:
+		distance = minf(distance, other.pos.distance_squared_to(at))
+	return distance
+
+static func coastal_chest(at: Vector2) -> bool:
+	return IslandMap.depth(at) <= CHEST_COAST_BAND
+
+static func coastal_chest_count(sim: GameSim) -> int:
+	var count_: int = 0
+	for chest in sim.exploration_chests:
+		if coastal_chest(chest.pos):
+			count_ += 1
+	return count_
+
+static func scattered_chest_free(sim: GameSim, at: Vector2) -> bool:
+	for centre in sim.world.lm_at.values():
+		if at.distance_squared_to(centre) < SCATTER_LANDMARK_CLEARANCE * SCATTER_LANDMARK_CLEARANCE:
+			return false
+	return chest_spot_free(sim, at, sim.chest_scenery)
+
+static func scattered_chest_spot(sim: GameSim, random, region: int) -> Vector2:
+	var bounds: Rect2 = chest_region_bounds(region).grow(-32)
+	var best: Vector2 = Vector2.INF
+	var best_distance: float = -1
+	var best_coastal: bool = true
+	var found: int = 0
+	# Prefer inland sites, then the widest gap among eight valid samples. Startup only.
+	for attempt in range(1024):
+		var at: Vector2 = (bounds.position + Vector2(random.randf(), random.randf()) * bounds.size).round()
+		if not scattered_chest_free(sim, at):
+			continue
+		var distance: float = nearest_chest_distance_squared(sim, at)
+		var coastal: bool = coastal_chest(at)
+		if not best.is_finite() or (best_coastal and not coastal) or (best_coastal == coastal and distance > best_distance):
+			best = at
+			best_distance = distance
+			best_coastal = coastal
+		found += 1
+		if found >= 8:
+			break
+	if best.is_finite():
+		return best
+	# A deterministic bounded fallback also prefers inland ground and obeys the coastal cap.
+	var coastal_fallback: Vector2 = Vector2.INF
+	for y in range(ceili(bounds.position.y), floori(bounds.end.y), 96):
+		for x in range(ceili(bounds.position.x), floori(bounds.end.x), 96):
+			var at = Vector2(x, y)
+			if scattered_chest_free(sim, at):
+				if not coastal_chest(at):
+					return at
+				if not coastal_fallback.is_finite():
+					coastal_fallback = at
+	if coastal_fallback.is_finite():
+		return coastal_fallback
+	Cs.fail("No accessible scattered chest spot in region %d" % region)
 	return Vector2.ZERO
 
 static func chest_spot(sim: GameSim, l, angle: float) -> Vector2:
@@ -106,17 +199,29 @@ static func chest_spot(sim: GameSim, l, angle: float) -> Vector2:
 	var centre: Vector2 = w.lm_at.get(l.id, l.pos)
 	var search = Rect2(centre - Vector2.ONE * 432, Vector2.ONE * 864)
 	var scenery = sim.chest_scenery.filter(func(b): return b.intersects(search))
-	var ring: float = 2
-	while ring <= 12:
-		for i in range(24):
-			var at: Vector2 = (centre + Vector2.from_angle(angle + i * TAU / 24) * ring * 32).round()
-			if chest_spot_free(sim, at, scenery):
-				return at
-		ring += 0.75
+	# Search the full inland side first, reserving the small coastal budget for narrow shore sites.
+	for allow_coast in [false, true]:
+		var ring: float = 2
+		while ring <= 12:
+			for i in range(24):
+				var at: Vector2 = (centre + Vector2.from_angle(angle + i * TAU / 24) * ring * 32).round()
+				if not allow_coast and coastal_chest(at):
+					continue
+				if chest_region(at) == chest_region(centre) and chest_spot_free(sim, at, scenery):
+					return at
+			ring += 0.75
 	Cs.fail("No accessible chest spot at landmark %s" % [l.id])
 	return Vector2.ZERO
 
 static func chest_spot_free(sim: GameSim, at: Vector2, scenery) -> bool:
+	# Reject cheap distance / water checks before scanning the full artwork and resource caches.
+	if nearest_chest_distance_squared(sim, at) < CHEST_MIN_SPACING * CHEST_MIN_SPACING:
+		return false
+	if coastal_chest(at) and coastal_chest_count(sim) >= CHEST_COAST_LIMIT:
+		return false
+	var w = sim.world
+	if Cs.has_point(w.weather_room.grow(48), at) or not IslandMap.on_land(at, 32) or w.terrain_at(at) == 1 or SimWorld.inside_base(at) or IslandMap.in_bridge_approach(at, 32):
+		return false
 	var footprint = Rect2(at - Vector2(20, 33), Vector2(40, 40)).grow(8)
 	for bounds in scenery:
 		if bounds.intersects(footprint):
@@ -124,11 +229,7 @@ static func chest_spot_free(sim: GameSim, at: Vector2, scenery) -> bool:
 	for resource in sim.chest_resources:
 		if resource.distance_squared_to(at) < 56 * 56:
 			return false
-	for other in sim.exploration_chests:
-		if other.pos.distance_squared_to(at) < 160 * 160:
-			return false
-	var w = sim.world
-	if Cs.has_point(w.weather_room.grow(48), at) or not IslandMap.on_land(at, 32) or w.terrain_at(at) == 1 or not w.resolve_fast(at, 26).is_equal_approx(at) or SimWorld.inside_base(at) or IslandMap.in_bridge_approach(at, 32):
+	if not w.resolve_fast(at, 26).is_equal_approx(at):
 		return false
 	return not w.in_cave_region(at) or w.in_cave_floor(at)
 
@@ -226,7 +327,7 @@ static func try_loot_chest(sim: GameSim, p, dt: float = 0.05) -> bool:
 			open_chest_panel(sim, p, c.id)
 			return true
 		if SimInventory.count(sim, p, "chest_key") == 0:
-			SimPlayers.note(sim, p, "Need a chest key")
+			SimPlayers.note(sim, p, "Need chest key")
 			p.inter = false
 			return true
 		var player_id: int = int(p.id)
@@ -284,17 +385,17 @@ static func try_build_radio(sim: GameSim, p, dt: float) -> bool:
 	if sim.radio_built or p.state != 0 or not at_radio(sim, p):
 		return false
 	if sim.phase != "day":
-		SimPlayers.note(sim, p, "Repair the locator radio by day, before night 5")
+		SimPlayers.note(sim, p, "Day only")
 		return true
 	if p.atk or p.craft_idx >= 0 or p.channel > 0 or p.get("tower_build_t", 0.0) > 0 or p.get("repair_kit_t", 0.0) > 0:
-		SimPlayers.note(sim, p, "Finish the current action before repairing the radio")
+		SimPlayers.note(sim, p, "Busy")
 		return true
 	if sim.radio_parts_placed.count(1) < 3:
-		SimPlayers.note(sim, p, "Radio table: %d/3 parts installed. Find the remaining parts in chests." % [sim.radio_parts_placed.count(1)])
+		SimPlayers.note(sim, p, "Radio: %d/3 parts" % [sim.radio_parts_placed.count(1)])
 		return true
 	var id: int = int(p.id)
 	if sim.radio_builder != null and sim.radio_builder != id:
-		SimPlayers.note(sim, p, "A teammate is assembling the radio")
+		SimPlayers.note(sim, p, "Radio in use")
 		return true
 	if not sim.radio_builder != null:
 		sim.radio_builder = id

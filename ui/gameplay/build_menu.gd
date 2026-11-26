@@ -9,7 +9,7 @@ var build_vert = false
 # A placement click stays consumed until release, even after the preview closes.
 var placement_click_held: bool = false
 # [kind, label, cost text, unlock tier]
-static var BUILD_OPTIONS = [["tower", "Tower  300 HP, 6s build", "10 wood + 5 titanium", 2]]
+static var BUILD_OPTIONS = [["tower", "Tower | 300 HP | 6s", "10 wood + 5 titanium", 2]]
 
 # constants shared with Main
 const GOLD = Main.GOLD
@@ -29,7 +29,7 @@ func close_build() -> void:
 func toggle_build() -> void:
 	var me = main.snap.ps.get(main.my_id)
 	if me == null or me[1] != 2 or me[5] != 0 or me[19]:
-		self.note("Only the Engineer builds")
+		self.note("Engineer only")
 		return
 	if build_open:
 		self.close_build()
@@ -74,16 +74,16 @@ func build_problem(me) -> Variant:
 	if why != "":
 		return why
 	if main.snap.get("tw", []).size() + main.snap.get("construction", []).size() >= GameSim.MAX_TOWERS:
-		return "Tower limit reached"
+		return "Tower limit"
 	for q in main.snap.ps.values():
 		if Vector2(q[2]).distance_to(spot) < 1.1 * T:
-			return "Someone is standing there"
+			return "Spot occupied"
 	if main.snap.get("free_tower", false):
 		return ""
 	var tier: int = 2
 	var cost = GameSim.TOWER_COST
 	if tier > main.snap.get("unlock", 0):
-		return "Unlocks after night 1" if tier == 1 else "Unlocks after the first boss"
+		return "Clear night 1" if tier == 1 else "Defeat first boss"
 	for res in cost:
 		if InventoryUi.carried(me, res) < cost[res]:
 			return "Need %d %s" % [cost[res], res]
@@ -110,7 +110,7 @@ func draw_build_menu(c, vs, me) -> void:
 		return
 	var box_: Rect2 = Rect2(vs.x - 330, 126, 320, 112)
 	main.panel(c, box_)
-	main.text(c, box_.position + Vector2(10, 16), "PLACE TOWER (T to cancel)", 10, GOLD, 0, -1.0, true)
+	main.text(c, box_.position + Vector2(10, 16), "TOWER | T: cancel", 10, GOLD, 0, -1.0, true)
 	var unlock: int = main.snap.get("unlock", 0)
 	for i in range(BUILD_OPTIONS.size()):
 		var o = BUILD_OPTIONS[i]
@@ -124,7 +124,7 @@ func draw_build_menu(c, vs, me) -> void:
 		main.text(c, box_.position + Vector2(10, 38 + i * 18), "%d  %s - %s%s" % [i + 1, o[1], cost, "  LOCKED" if locked else ""], 11, col)
 	if build_kind != "":
 		var why = self.build_problem(me)
-		main.text(c, box_.position + Vector2(10, 100), "Left click to place" if why == "" else why, 11, Color(0.4, 1.0, 0.5) if why == "" else NEON_RED)
+		main.text(c, box_.position + Vector2(10, 100), "LMB: place" if why == "" else why, 11, Color(0.4, 1.0, 0.5) if why == "" else NEON_RED)
 
 # A built wall: [pos, vertical, hp, maxhp, kind] drawn as a raised block with an HP bar once damaged.
 func draw_built_wall(w) -> void:

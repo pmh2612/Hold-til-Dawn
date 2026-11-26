@@ -27,22 +27,27 @@ static func in_base_to_work(sim: GameSim, p) -> bool:
 static func at_bench(sim: GameSim, p) -> bool:
 	return in_base_to_work(sim, p) and SimWorld.near_bench(Vector2(p.pos))
 
+# Shared by the simulation and workbench UI; -1 means every role may craft it.
+static func craft_role(recipe) -> int:
+	return 1 if recipe[3] == "healing_flask" else 2 if recipe[5] else -1
+
 # Checks every rule of MEC-10; Note() tells the player why not.
 static func can_craft(sim: GameSim, p, idx: int, tell: bool = true) -> bool:
 	if idx < 0 or idx >= GameSim.RECIPES.size():
 		return false
 	var r = GameSim.RECIPES[idx]
+	var role: int = craft_role(r)
 	var why = ""
 	if p.state != 0 or not at_bench(sim, p):
-		why = "Go to the workbench"
+		why = "Move to workbench"
 	elif sim.radio_builder == int(p.id):
-		why = "Finish repairing the radio first"
+		why = "Radio repair in progress"
 	elif r[2] > sim.unlock:
 		why = "%s is locked" % [r[0]]
-	elif r[5] and p.role != 2:
-		why = "Engineer only"
+	elif role >= 0 and int(p.role) != role:
+		why = "%s only" % GameSim.ROLES[role]
 	elif r[3] == "base" and sim.phase == "night":
-		why = "By day only"
+		why = "Day only"
 	elif r[3] == "base" and sim.base_hp >= BASE_HP:
 		why = "Generator full"
 	elif SimInventory.kind_of(r[3]) == "armour" and GameSim.ARMOUR_ITEMS.find(r[3]) <= int(p.armour):
@@ -50,7 +55,7 @@ static func can_craft(sim: GameSim, p, idx: int, tell: bool = true) -> bool:
 	else:
 		for res in r[1]:
 			if SimSupplies.craft_have(sim, p, Cs.s(res)) < r[1][res]:
-				why = "Need more %s" % [SimInventory.item_name(res)]
+				why = "Need %s" % [SimInventory.item_name(res)]
 				break
 	if why != "" and tell:
 		note(sim, p, why)
@@ -60,12 +65,12 @@ static func craft_duration(sim: GameSim, idx: int) -> Variant:
 	var r = GameSim.RECIPES[idx]
 	return r[4] / 20.0 if r[3] == "base" else CRAFT_TIME
 
-static func player_craft_duration(sim: GameSim, p, idx: int) -> float:
-	return float(craft_duration(sim, idx)) * (0.8 if SimInventory.count(sim, p, "crafting_kit") > 0 else 1.0)
+static func player_craft_duration(sim: GameSim, _p, idx: int) -> float:
+	return float(craft_duration(sim, idx))
 
 # Starts the craft channel; the cost is paid when it completes (TickCraft).
 static func craft(sim: GameSim, p, idx) -> void:
-	if p.craft_idx >= 0 or not can_craft(sim, p, int(idx)):
+	if p.craft_idx >= 0 or not can_craft(sim, p, int(idx), false):
 		return
 	p.craft_idx = int(idx)
 	p.craft_t = 0.0
@@ -83,7 +88,7 @@ static func tick_craft(sim: GameSim, p, dt) -> void:
 	var idx: int = int(p.craft_idx)
 	p.craft_idx = -1
 	p.craft_t = 0.0
-	if can_craft(sim, p, idx):
+	if can_craft(sim, p, idx, false):
 		finish_craft(sim, p, idx)
 
 static func finish_craft(sim: GameSim, p, idx: int) -> void:
@@ -95,6 +100,7 @@ static func finish_craft(sim: GameSim, p, idx: int) -> void:
 	else:
 		SimInventory.add_item(sim, p, r[3], r[4])
 	note(sim, p, "Crafted " + Cs.s(r[0]))
+	SimAudio.emit(sim, "craft_done", p.pos, p.id)
 
 # --- players ------------------------------------------------------------
 static func reset_player(sim: GameSim, p) -> void:
@@ -249,6 +255,7 @@ static func tick_entry(sim: GameSim, p, dt) -> void:
 		return
 	p.entry = 0.0
 	p.inside = not p.inside
+	SimAudio.emit(sim, "entry", GameSim.DOOR_POS[door], p.id)
 	if p.inside:
 		SimPhases.teleport(sim, p, GameSim.DOOR_POS[door] - GameSim.DOOR_DIR[door] * 1.2 * T)
 		note(sim, p, "Inside the base")
@@ -268,11 +275,13 @@ static func attack(sim: GameSim, p) -> void:
 	var st = GameSim.WEAPON_STATS[w]
 	if st[4] and not SimInventory.take(sim, p, "arrow", 1):
 		note(sim, p, "No arrows")
+		SimAudio.emit(sim, "empty_bow", p.pos, p.id)
 		p.atk_cd = 0.5
 		return
 	# BAL-07: the Scout attacks 1.25x faster
 	p.atk_cd = 1.0 / (st[1] * (1.25 if p.role == 0 else 1.0))
 	p.swing = 0.25
+	SimAudio.emit(sim, "bow" if st[3] else "attack_" + str(w), p.pos, p.id)
 	var dir = Vector2.from_angle(p.aim)
 	if st[3]:
 		sim.arrows.append({"pos": p.pos + dir * (0.4 * T), "vel": dir * ARROW_SPEED * T, "dmg": st[0], "left": st[2] * T - 0.4 * T, "owner": p.id})
@@ -310,6 +319,7 @@ static func tick_arrows(sim: GameSim, dt) -> void:
 			SimTacticalItems.explode_arrow(sim, a)
 		if first < INF:
 			a.left = 0.0
+			SimAudio.emit(sim, "arrow_hit", a.pos, a.owner)
 			var owner = sim.players.get(a.owner)
 			if a.get("explosive", false):
 				SimTacticalItems.explode_arrow(sim, a)
@@ -442,7 +452,7 @@ static func interact(sim: GameSim, p, dt) -> void:
 				p.gather_acc = 0.0
 			if p.gather_acc == 0.0:
 				p.gather_pos = p.pos
-			p.gather_acc += 0.35 * dt * (1.25 if SimInventory.count(sim, p, "gathering_kit") > 0 else 1.0)
+			p.gather_acc += 0.35 * dt
 			if p.gather_acc >= 1.0:
 				p.gather_acc = 0.0
 				nd.amount -= 1

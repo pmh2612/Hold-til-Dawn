@@ -238,16 +238,16 @@ static func pick_node(sim, p) -> Variant:
 	return best
 
 static func craft(sim, p) -> void:
-	# One useful recipe it can afford: best weapon and armour first, then kits. Crafting takes 3 s.
+	# One useful recipe it can afford: best weapon and armour first, then support items. Crafting takes 3 s.
 	if p.bot_cd > 0 or p.craft_idx >= 0:
 		return
 	p.bot_cd = 0.5
 	var dead: bool = sim.players.values().any(func(q): return q.state == 2)
 	var has_weapon: int = 2 if sim.count(p, "titanium_blade") > 0 else 1 if sim.count(p, "stone_spear") > 0 else 0
-	for idx in [9, 12, 4, 5, 11, 3, 1, 7, 8, 13, 14, 15, 16, 17, 2, 0]:
+	for idx in [9, 12, 4, 5, 11, 3, 1, 7, 8, 13, 14, 15, 2, 0]:
 		var r = GameSim.RECIPES[idx]
 		var makes = r[3]
-		var useful: bool = has_weapon < 2 and sim.count(p, "long_spear") == 0 and sim.count(p, "stun_maul") == 0 if makes == "long_spear" else p.role == 2 and sim.count(p, "stun_maul") == 0 if makes == "stun_maul" else sim.count(p, "gathering_kit") == 0 if makes == "gathering_kit" else sim.count(p, "crafting_kit") == 0 if makes == "crafting_kit" else p.role == 0 and not sim.radio_built and sim.count(p, "chest_key") < 2 if makes == "chest_key" else p.role == 1 and sim.count(p, "healing_flask") < 2 if makes == "healing_flask" else p.role == 0 and sim.count(p, "poison_flask") < 2 if makes == "poison_flask" else p.role == 2 and sim.count(p, "vine_trap") < 2 if makes == "vine_trap" else sim.count(p, "haste_tonic") < 1 if makes == "haste_tonic" else p.role == 2 and sim.count(p, "repair_kit") < 1 if makes == "repair_kit" else has_weapon < 1 and sim.count(p, "long_spear") == 0 if makes == "stone_spear" else has_weapon < 2 if makes == "titanium_blade" else p.role == 0 and sim.count(p, "bow") == 0 and sim.count(p, "starter_bow") == 0 if makes == "bow" else sim.count(p, "bow") > 0 and sim.count(p, "arrow") < 10 if makes == "arrow" else sim.armour_tier(p) < 1 if makes == "light_armour" else sim.armour_tier(p) < 2 if makes == "stone_armour" else sim.armour_tier(p) < 3 if makes == "titanium_armour" else sim.count(p, "bandage") < 2 if makes == "bandage" else dead and sim.count(p, "revive") == 0 if makes == "revive" else sim.base_hp <= GameSim.BASE_HP - 100 if makes == "base" else false
+		var useful: bool = has_weapon < 2 and sim.count(p, "long_spear") == 0 and sim.count(p, "stun_maul") == 0 if makes == "long_spear" else p.role == 2 and sim.count(p, "stun_maul") == 0 if makes == "stun_maul" else p.role == 0 and not sim.radio_built and sim.count(p, "chest_key") < 2 if makes == "chest_key" else p.role == 1 and sim.count(p, "healing_flask") < 2 if makes == "healing_flask" else p.role == 0 and sim.count(p, "poison_flask") < 2 if makes == "poison_flask" else p.role == 2 and sim.count(p, "vine_trap") < 2 if makes == "vine_trap" else sim.count(p, "haste_tonic") < 1 if makes == "haste_tonic" else p.role == 2 and sim.count(p, "repair_kit") < 1 if makes == "repair_kit" else has_weapon < 1 and sim.count(p, "long_spear") == 0 if makes == "stone_spear" else has_weapon < 2 if makes == "titanium_blade" else p.role == 0 and sim.count(p, "bow") == 0 and sim.count(p, "starter_bow") == 0 if makes == "bow" else sim.count(p, "bow") > 0 and sim.count(p, "arrow") < 10 if makes == "arrow" else sim.armour_tier(p) < 1 if makes == "light_armour" else sim.armour_tier(p) < 2 if makes == "stone_armour" else sim.armour_tier(p) < 3 if makes == "titanium_armour" else sim.count(p, "bandage") < 2 if makes == "bandage" else dead and sim.count(p, "revive") == 0 if makes == "revive" else sim.base_hp <= GameSim.BASE_HP - 100 if makes == "base" else false
 		if useful and sim.can_craft(p, int(idx), false):
 			sim.craft(p, idx)
 			return
@@ -357,7 +357,7 @@ static func fetch_rescue_by_day(sim, p, dt) -> bool:
 			if not s.at_bench(p):
 				move(s, p, GameSim.WORKBENCH_POS + Vector2(0, 24), dt)
 			else:
-				s.craft(p, 17)
+				s.craft(p, 15)
 			return true
 		return false
 	return fetch_supply(sim, p, dt)

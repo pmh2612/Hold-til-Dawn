@@ -21,7 +21,8 @@ var lobby_count = Label.new()
 var role_cards = []
 var bot_buttons = []
 var portraits = {}
-static var ROLE_INFO = [["FAST & FEARLESS", "Moves and strikes faster."], ["KEEP THEM STANDING", "Heals and revives faster."], ["BUILD THE LAST DEFENCE", "Builds towers and repairs."]]
+var audio_credits: AcceptDialog
+static var ROLE_INFO = [["MOBILITY", "Fast movement & attacks"], ["SUPPORT", "Fast healing & revives"], ["DEFENCE", "Towers & repairs"]]
 
 # constants shared with Main
 const GOLD = Main.GOLD
@@ -50,17 +51,17 @@ func lobby_ui() -> void:
 			row.icon.texture = self.portrait(p[1])
 			row.name.modulate = Color.WHITE
 		else:
-			row.name.text = "Open crew slot"
+			row.name.text = "Empty slot"
 			row.name.modulate = Color("64788A")
-			row.meta.text = "Add a bot to fill this slot"
+			row.meta.text = "Add bot"
 			row.badge.text = "%02d" % [i + 1]
 			row.badge.add_theme_color_override("font_color", Color("435768"))
 	lobby_count.text = "%d / 5 CREW" % [ids.size()]
 	lobby_text.text = main.snap.get("msg", "")
 	var leader: bool = main.my_id == main.snap.leader
-	start_btn.text = "START EXPEDITION  >" if leader else "WAITING FOR LEADER"
+	start_btn.text = "START  >" if leader else "WAITING FOR LEADER"
 	start_btn.disabled = not leader or not eng
-	lobby_hint.text = "Ready" if eng else "Needs an Engineer"
+	lobby_hint.text = "Ready" if eng else "Need Engineer"
 	lobby_hint.modulate = Color("89A498") if eng else Color("F2B544")
 	if not main.snap.ps.has(main.my_id):
 		lobby_hint.text = "Lobby full."
@@ -117,8 +118,7 @@ func build_ui() -> void:
 	menu.add_theme_constant_override("separation", 8)
 	lobby.add_theme_constant_override("separation", 8)
 	main.lobby_panel.add_theme_stylebox_override("panel", self.ui_style(Color("0D1823"), Color("3C505A"), 1, 16))
-	menu.add_child(self.ui_label("YOUR WATCH BEGINS HERE", 10, GOLD))
-	menu.add_child(self.ui_label("Take the watch", 32, Color.WHITE, true))
+	menu.add_child(self.ui_label("NEW GAME", 32, Color.WHITE, true))
 	menu.add_child(self.ui_label("CALLSIGN", 10, Color("8499AC")))
 	name_edit.placeholder_text = "Your name"
 	name_edit.text = "Player%d" % [randi_range(1, 99)]
@@ -128,7 +128,7 @@ func build_ui() -> void:
 		for r in GameSim.ROLES:
 			opt.add_item(r)
 	main.role_opt.selected = 2
-	menu.add_child(self.ui_label("CHOOSE YOUR ROLE", 10, Color("8499AC")))
+	menu.add_child(self.ui_label("ROLE", 10, Color("8499AC")))
 	menu.add_child(main.role_opt)
 	menu.add_child(self.role_card(main.role_opt))
 	var play_btn = self.ui_button("PLAY  >", true)
@@ -137,6 +137,11 @@ func build_ui() -> void:
 		main.start_local()
 	)
 	menu.add_child(play_btn)
+	var credits_btn = self.ui_button("AUDIO CREDITS")
+	credits_btn.custom_minimum_size.y = 26
+	credits_btn.add_theme_font_size_override("font_size", 11)
+	credits_btn.pressed.connect(show_audio_credits)
+	menu.add_child(credits_btn)
 	main.status.add_theme_font_size_override("font_size", 11)
 	main.status.add_theme_color_override("font_color", Color("F2B544"))
 	main.status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -151,8 +156,7 @@ func build_ui() -> void:
 	var lobby_header = HBoxContainer.new()
 	var lobby_titles = VBoxContainer.new()
 	lobby_titles.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lobby_titles.add_child(self.ui_label("EXPEDITION / CREW ASSEMBLY", 10, GOLD))
-	lobby_titles.add_child(self.ui_label("Nobody holds alone.", 30, Color.WHITE, true))
+	lobby_titles.add_child(self.ui_label("CREW", 30, Color.WHITE, true))
 	lobby_header.add_child(lobby_titles)
 	lobby_count = self.ui_label("0 / 5 CREW", 12, Color("9CB9B2"))
 	lobby_count.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -188,8 +192,8 @@ func build_ui() -> void:
 		var names = VBoxContainer.new()
 		names.add_theme_constant_override("separation", 1)
 		names.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var pname = self.ui_label("Open crew slot", 13)
-		var meta = self.ui_label("Add a bot to fill this slot", 10, Color("8499AC"))
+		var pname = self.ui_label("Empty slot", 13)
+		var meta = self.ui_label("Add bot", 10, Color("8499AC"))
 		names.add_child(pname)
 		names.add_child(meta)
 		row.add_child(names)
@@ -247,7 +251,7 @@ func build_ui() -> void:
 	lobby_text.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lobby_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	bottom.add_child(lobby_text)
-	var leave = self.ui_button("<  LEAVE CREW")
+	var leave = self.ui_button("<  LEAVE")
 	leave.pressed.connect(func():
 		var signal_args = []
 		main.back_to_menu("Left the lobby")
@@ -322,6 +326,14 @@ func ui_button(value, primary = null) -> Variant:
 	if primary:
 		self.style_primary(button)
 	return button
+
+func show_audio_credits() -> void:
+	if audio_credits == null:
+		audio_credits = AcceptDialog.new()
+		audio_credits.title = "Audio credits"
+		audio_credits.dialog_text = "Vault — Alexandr Zhelanov (CC BY 3.0)\nApocalyptic Loops G / D — RUOK (CC BY 4.0)\nBlackmoor Colossus — Matthew Pablo (CC BY 3.0)\nAmbience of a Fallen Age — Umplix (CC0)\nDetermined Pursuit / Bittersweet — Emma_MA (CC0)\nFoley — Kenney (CC0)\nBeacon Home / creature & island sound design — original game audio\n\nScores: loudness-adjusted, Ogg conversion. Foley: edited and layered.\nFull sources and licences: art/audio/CREDITS.md\nopengameart.org · kenney.nl\ncreativecommons.org/licenses/by/3.0\ncreativecommons.org/licenses/by/4.0"
+		main.add_child(audio_credits)
+	audio_credits.popup_centered(Vector2i(690, 360))
 
 func style_primary(button) -> void:
 	button.add_theme_stylebox_override("normal", self.ui_style(Color("D9A94A"), Color("F1CC76"), 1, 10))
@@ -438,8 +450,7 @@ func draw_frontend() -> void:
 	c.draw_rect(Rect2(40, 29, 4, 13), Color("14212C"))
 	c.draw_rect(Rect2(37, 33, 10, 4), Color("14212C"))
 	main.text(c, Vector2(62, 36), "HOLD 'TIL DAWN", 15, Color("D6DFDD"), 0, -1, true)
-	main.text(c, Vector2(62, 49), "CO-OP SURVIVAL / ISLAND WATCH", 9, Color("6F8A99"))
-	main.text(c, Vector2(w - 215, 36), "THE LONG NIGHT AWAITS", 10, Color("8DA4AC"))
+	main.text(c, Vector2(62, 49), "SURVIVAL", 9, Color("6F8A99"))
 	for i in 5:
 		c.draw_rect(Rect2(w - 105 + i * 14, 44, 8, 3), GOLD if i == 0 else Color("334955"))
 	if main.menu_panel.visible:

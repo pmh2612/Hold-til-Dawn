@@ -1,6 +1,6 @@
 class_name PauseScreen
 extends Control
-## Pause overlay (Esc, section 6.3): the controls and Resume / Leave match. The layout is in
+## Pause overlay (Esc, section 6.3): audio settings and Resume / Leave match. The layout is in
 ## ui/menu/pause_screen.tscn; the paused state and the Esc key stay in ui/menu/pause_menu.gd.
 ## Owner: Mai Thien Ngon.
 
@@ -9,9 +9,7 @@ var main: Main
 
 func setup(host: Main) -> void:
 	main = host
-	%Controls.text = "\n".join(PauseMenuUi.CONTROLS)
 	HudLabels.style_title(%Title, main)
-	HudLabels.style_text(%Controls, main)
 	HudLabels.style_title(%Resume, main)
 	HudLabels.style_title(%Leave, main)
 	setup_audio()
@@ -25,7 +23,7 @@ func setup(host: Main) -> void:
 func setup_audio() -> void:
 	var levels := VBoxContainer.new()
 	levels.name = "AudioLevels"
-	levels.position = Vector2(26, 210)
+	levels.position = Vector2(26, 60)
 	levels.size = Vector2(388, 88)
 	levels.add_theme_constant_override("separation", 4)
 	$Box.add_child(levels)

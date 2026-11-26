@@ -19,7 +19,7 @@ static func is_tactical_use(id) -> bool:
 	return id == "vine_trap" or id == "poison_flask" or id == "healing_flask" or id == "haste_tonic" or id == "repair_kit" or id == "explosive_arrow"
 
 static func tactical_description(id) -> Variant:
-	return ["22 damage, reach 2.6, hits two"] if id == "long_spear" else ["30 damage, stuns 0.8 s"] if id == "stun_maul" else ["Roots a foe for 2.5 s"] if id == "vine_trap" else ["8 damage/s for 5 s"] if id == "poison_flask" else ["Heals 8 HP/s for 5 s"] if id == "healing_flask" else ["+20% speed for 8 s"] if id == "haste_tonic" else ["Gather 20% faster"] if id == "gathering_kit" else ["Craft 20% faster while carried", "Passive; one kit is enough"] if id == "crafting_kit" else ["Unlocks one expedition chest", "Hold E for 2 s; consumed on completion", "Unlocked chests reopen for free"] if id == "chest_key" else ["32 blast damage"] if id == "explosive_arrow" else ["+100 HP to a door, wall or tower"] if id == "repair_kit" else []
+	return ["DMG 22 | Reach 2.6", "Hits 2 targets"] if id == "long_spear" else ["DMG 30 | Stun 0.8s"] if id == "stun_maul" else ["Root: 2.5s"] if id == "vine_trap" else ["8 DMG/s | 5s"] if id == "poison_flask" else ["+8 HP/s | 5s"] if id == "healing_flask" else ["Speed +20% | 8s"] if id == "haste_tonic" else ["Hold E 2s: unlock", "Single use"] if id == "chest_key" else ["Blast DMG 32"] if id == "explosive_arrow" else ["+100 HP: door / tower"] if id == "repair_kit" else []
 
 static func player_speed(sim: GameSim, p) -> float:
 	return float(SPEED) * (1.2 if int(p.role) == 0 else 1.0) * (1.2 if p.get("haste_until", 0.0) > float(sim.clock) else 1.0)
@@ -80,10 +80,14 @@ static func use_tactical_item(sim: GameSim, p, id, aim_point: Vector2) -> bool:
 			sim.vine_traps.append({"pos": at, "owner": p.id, "until": now + 120.0})
 		else:
 			if sim.tactical_areas.size() >= MAX_TACTICAL_AREAS:
-				SimPlayers.note(sim, p, "Wait a moment")
+				SimPlayers.note(sim, p, "Wait")
 				return false
 			sim.tactical_areas.append({"pos": at, "owner": p.id, "kind": "poison" if id == "poison_flask" else "heal", "until": now + 5.0, "next": now + 0.5})
 	SimInventory.take(sim, p, id, 1)
+	if id == "explosive_arrow":
+		SimAudio.emit(sim, "bow", pos, p.id)
+	elif id in ["poison_flask", "healing_flask"]:
+		SimAudio.emit(sim, "flask", pos, p.id)
 	p.item_cd = now + 0.6
 	# the throw / drink plays as a short swing of the character
 	if id != "explosive_arrow":
@@ -167,11 +171,12 @@ static func attack_long_spear(sim: GameSim, p) -> void:
 		SimPlayers.hit(sim, hits[i][1], 22.0, p)
 	p.atk_cd = 0.8 if int(p.role) == 0 else 1.0
 	p.swing = 0.25
+	SimAudio.emit(sim, "attack_long_spear", pos, p.id)
 	sim.enemies = sim.enemies.filter(func(e): return e.hp > 0)
 
 static func begin_field_repair(sim: GameSim, p, aim: Vector2) -> bool:
 	if int(p.role) != 2 or SimWorld.inside_base(p.pos):
-		SimPlayers.note(sim, p, "Use outside the base")
+		SimPlayers.note(sim, p, "Use outside base")
 		return false
 	var target = null
 	var kind = ""
@@ -197,7 +202,7 @@ static func begin_field_repair(sim: GameSim, p, aim: Vector2) -> bool:
 	var spot: Vector2 = Vector2(GameSim.DOOR_POS[door]) if kind == "door" else Vector2.INF if target == null else Vector2(target.pos)
 	var approach: Vector2 = spot.move_toward(Vector2(p.pos), T) if spot.is_finite() else spot
 	if kind == "" or spot.distance_to(Vector2(p.pos)) > 3.0 * T or not SimWorld.line_clear(sim, p.pos, approach):
-		SimPlayers.note(sim, p, "Nothing to repair here")
+		SimPlayers.note(sim, p, "Nothing to repair")
 		return false
 	p.repair_kit_kind = kind
 	p.repair_kit_door = door

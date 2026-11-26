@@ -101,7 +101,7 @@ offset_right = 600.0
 offset_bottom = 99.0
 theme_override_colors/font_color = Color(1, 1, 1, 0.7)
 theme_override_font_sizes/font_size = 12
-text = "Night reached: 1 / 5"
+text = "Night 1 / 5"
 horizontal_alignment = 1
 
 [node name="Table" type="Control" parent="Box"]
