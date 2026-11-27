@@ -65,8 +65,9 @@ static func use_tactical_item(sim: GameSim, p, id, aim_point: Vector2) -> bool:
 			dir = Vector2.from_angle(float(p.aim))
 		sim.arrows.append({"pos": pos + dir * 0.4 * T, "vel": dir * ARROW_SPEED * T, "dmg": 32.0, "left": 7.6 * T, "owner": p.id, "explosive": true})
 		p.aim = dir.angle()
-		p.swing = 0.25
-		p.atk_cd = 1.0
+		SimPlayers.begin_attack_pose(p, "explosive_arrow", GameSim.WEAPON_SWING_TIME)
+		# Special arrows keep their existing role-neutral cadence, now 50% faster too.
+		p.atk_cd = SimPlayers.attack_interval("bow", -1)
 	else:
 		if not SimWorld.line_clear(sim, pos, at) or not IslandMap.on_land(at, 8.0) or id == "vine_trap" and Vector2(sim.world.resolve_fast(at, 8.0)).distance_to(at) > 1.0:
 			SimPlayers.note(sim, p, "Blocked")
@@ -93,7 +94,7 @@ static func use_tactical_item(sim: GameSim, p, id, aim_point: Vector2) -> bool:
 	p.item_cd = now + 0.6
 	# the throw / drink plays as a short swing of the character
 	if id != "explosive_arrow":
-		p.swing = 0.25
+		SimPlayers.begin_attack_pose(p, Cs.s(id), 0.25)
 	SimPlayers.note(sim, p, "Used " + SimInventory.item_name(id))
 	return true
 
@@ -171,8 +172,8 @@ static func attack_long_spear(sim: GameSim, p) -> void:
 	Cs.sort_cmp(hits, func(a, b): return Cs.compare(a[0], b[0]))
 	for i in range(mini(2, hits.size())):
 		SimPlayers.hit(sim, hits[i][1], 22.0, p)
-	p.atk_cd = 0.8 if int(p.role) == 0 else 1.0
-	p.swing = 0.25
+	p.atk_cd = SimPlayers.attack_interval("long_spear", int(p.role))
+	SimPlayers.begin_attack_pose(p, "long_spear", GameSim.WEAPON_SWING_TIME)
 	SimAudio.emit(sim, "attack_long_spear", pos, p.id)
 	sim.enemies = sim.enemies.filter(func(e): return e.hp > 0)
 

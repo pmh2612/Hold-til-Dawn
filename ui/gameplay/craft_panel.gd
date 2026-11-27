@@ -4,14 +4,14 @@ extends RefCounted
 # Part of Main (main.gd); in the C# version this was ui/gameplay/Main.CraftPanel.cs.
 # Owner: Vu Duc Viet Anh. The workbench tab (MEC-10, BAL-19, recipe table in GDD section 3.2), opened with C.
 # It takes the middle of the screen like the bag: on the left every recipe as a card with its icon, grouped by
-# category and tier; on the right the picked recipe in detail (what it does, its numbers) and how it is made, drawn as
+# weapon/equipment category; on the right the picked recipe in detail and its ingredient icons, drawn as
 # ingredients + ingredients -> result, the steps to follow and a Craft button. A number key still crafts at once.
 # The server decides (GameSim.CanCraft); the reasons shown here only mirror its rules.
 # the recipe shown on the right
-var craft_sel: int = 0
-var craft_tier: int = 0
+var craft_sel: int = 16 # Hammer leads the weapons list.
 var craft_category: int = 0
 var radio_mode: bool = false
+var field_mode: bool = false
 
 # constants shared with Main
 const GOLD = Main.GOLD
@@ -26,30 +26,25 @@ func craft_choices() -> Variant:
 	var choices = []
 	var i: int = 0
 	while i < GameSim.RECIPES.size():
-		if int(GameSim.RECIPES[i][2]) == craft_tier and category_of(i) == craft_category:
+		if category_of(i) == craft_category:
 			choices.append(i)
 		i += 1
+	if choices.has(16):
+		choices.erase(16)
+		choices.push_front(16)
 	return choices
 
 static func category_of(i: int) -> int:
-	return 0 if SimInventory.kind_of(GameSim.RECIPES[i][3]) in ["weapon", "ammo"] else 1
+	var kind: String = SimInventory.kind_of(GameSim.RECIPES[i][3])
+	return 0 if kind in ["weapon", "ammo"] else 2 if kind == "armour" else 1
 
 func craft_category_button(vs: Vector2, category: int) -> Rect2:
 	var p = craft_panel_rect(vs)
-	var w: float = (craft_left_w(p) - 8) / 2
+	var w: float = (craft_left_w(p) - 8) / 3
 	return Rect2(p.position.x + 20 + category * (w + 4), p.position.y + HEAD_H + 4, w, 26)
 
 func select_craft_category(category: int) -> void:
-	craft_category = clampi(category, 0, 1)
-	select_craft_tier(craft_tier)
-
-func craft_tier_button(vs: Vector2, tier: int) -> Rect2:
-	var p: Rect2 = craft_panel_rect(vs)
-	var w: float = (craft_left_w(p) - 12) / 3
-	return Rect2(p.position.x + 20 + tier * (w + 4), p.position.y + HEAD_H + 36, w, 26)
-
-func select_craft_tier(tier: int) -> void:
-	craft_tier = clampi(tier, 0, 2)
+	craft_category = clampi(category, 0, 2)
 	var choices = craft_choices()
 	if not choices.is_empty() and not choices.has(craft_sel):
 		craft_sel = choices[0]
@@ -75,8 +70,11 @@ func craft_card(vs: Vector2, i: int) -> Rect2:
 	var lw: float = self.craft_left_w(p)
 	var cw: float = floorf((lw - 3 * CARD_GAP) / 4)
 	var k: int = craft_choices().find(i)
-	var y: float = p.position.y + HEAD_H + 70 + k / 4 * (CARD_H + 12)
-	return Rect2(p.position.x + 20 + k % 4 * (cw + CARD_GAP), y, cw, CARD_H)
+	# Up to three rows fit above the backpack; two rows retain the larger artwork.
+	var rows: int = maxi(1, ceili(craft_choices().size() / 4.0))
+	var height: float = minf(CARD_H, floorf((226.0 - (rows - 1) * CARD_GAP) / rows))
+	var y: float = p.position.y + HEAD_H + 36 + k / 4 * (height + CARD_GAP)
+	return Rect2(p.position.x + 20 + k % 4 * (cw + CARD_GAP), y, cw, height)
 
 func craft_detail(p: Rect2) -> Rect2:
 	var x: float = p.position.x + 20 + self.craft_left_w(p) + 24
@@ -119,6 +117,9 @@ func craft_tag(id) -> Variant:
 # one short line of numbers
 func craft_desc(id) -> Variant:
 	var out = []
+	if SimInventory.kind_of(id) == "bag":
+		var tier: int = GameSim.BAG_ITEMS.find(id)
+		return ["+%d slots | %d total" % [GameSim.BAG_BONUS[tier], GameSim.INV_SLOTS + GameSim.BAG_BONUS[tier]], "Equips on craft"]
 	if SimSupplies.rescue_kind(id) >= 0:
 		out.append("3 parts: island chests")
 		return out
@@ -166,6 +167,8 @@ func craft_block(me, i: int) -> Variant:
 		return "%s only" % GameSim.ROLES[role]
 	if SimInventory.kind_of(id) == "armour" and GameSim.ARMOUR_ITEMS.find(id) <= int(me[9]):
 		return "Already worn"
+	if SimInventory.kind_of(id) == "bag" and GameSim.INV_SLOTS + GameSim.BAG_BONUS[GameSim.BAG_ITEMS.find(id)] <= me[7].size():
+		return "Already worn"
 	if id == "base":
 		if main.snap.get("ph", "") == "night":
 			return "Day only"
@@ -176,7 +179,7 @@ func craft_block(me, i: int) -> Variant:
 		var have: int = main.survival_feedback.craft_have_local(me, Cs.s(res))
 		if have < need:
 			return "Need %d %s" % [need - have, SimInventory.item_name(res)]
-	if not main.inventory.at_bench_local(me):
+	if id != "revive" and not main.inventory.at_bench_local(me):
 		return "Move to workbench"
 	var busy: int = int(me[26])
 	if busy >= 0 and busy != i:
@@ -201,21 +204,15 @@ func draw_craft_panel(c, vs) -> void:
 	c.draw_rect(p, Color(0.06, 0.07, 0.1, 1.0))
 	c.draw_rect(p, GOLD * Color(1, 1, 1, 0.7), false, 1.5)
 	c.draw_line(Vector2(p.position.x + 16, p.position.y + HEAD_H - 8), Vector2(p.end.x - 16, p.position.y + HEAD_H - 8), Color(1, 1, 1, 0.1), 1.0)
-	main.text(c, p.position + Vector2(20, 28), "WORKBENCH", 18, GOLD, 0, -1.0, true)
-	# Categories separate weapons/ammo from armour, healing and tools; tiers still gate progression.
+	main.text(c, p.position + Vector2(20, 28), "FIELD CRAFT" if field_mode else "WORKBENCH", 18, GOLD, 0, -1.0, true)
+	# Both categories show all their recipes, including progression-locked ones.
 	var lw: float = self.craft_left_w(p)
-	for category in range(2):
+	for category in range(3):
 		var tab = craft_category_button(v, category)
 		var selected: bool = craft_category == category
 		c.draw_rect(tab, Color("594A25") if selected else Color("15171F"))
 		c.draw_rect(tab, GOLD if selected else Color("45464C"), false, 1)
-		main.text(c, tab.position + Vector2(0, 18), "WEAPONS" if category == 0 else "EQUIPMENT", 12, GOLD if selected else Color.WHITE, 1, tab.size.x, true)
-	for t in range(3):
-		var tab: Rect2 = craft_tier_button(v, t)
-		var open: bool = t == 3 or t <= main.snap.get("unlock", 0)
-		c.draw_rect(tab, Color(0.35, 0.29, 0.14, 0.95) if craft_tier == t else Color(0.08, 0.09, 0.12, 0.9))
-		c.draw_rect(tab, GOLD if craft_tier == t else Color(1, 1, 1, 0.2), false, 1.0)
-		main.text(c, Vector2(tab.position.x, tab.position.y + 18), "BASIC" if t == 0 else "STONE" if t == 1 else "TITANIUM", 11, GOLD if open else Color.GRAY, 1, tab.size.x, true)
+		main.text(c, tab.position + Vector2(0, 18), ["WEAPONS", "EQUIPMENT", "ARMOR"][category], 12, GOLD if selected else Color.WHITE, 1, tab.size.x, true)
 	var busy: int = int(me[26])
 	for i in craft_choices():
 		self.draw_craft_card(c, me, i, self.craft_card(v, i), mouse, busy)
@@ -226,8 +223,11 @@ func draw_craft_panel(c, vs) -> void:
 func craft_bag_slots(vs: Vector2) -> Array:
 	var p = craft_panel_rect(vs)
 	var slots: Array = []
-	for i in range(GameSim.INV_SLOTS):
-		slots.append(Rect2(p.position + Vector2(20 + i * (InventoryUi.SLOT + InventoryUi.SLOT_GAP), 344), Vector2.ONE * InventoryUi.SLOT))
+	var me = main.snap.get("ps", {}).get(main.my_id)
+	var count_: int = GameSim.INV_SLOTS if me == null else me[7].size()
+	var size_: float = InventoryUi.SLOT if count_ <= 8 else 34.0
+	for i in range(count_):
+		slots.append(Rect2(p.position + Vector2(20 + i % 8 * (size_ + 4), (344 if count_ <= 8 else 332) + i / 8 * (size_ + 4)), Vector2.ONE * size_))
 	return slots
 
 func craft_bag_slot_at(vs: Vector2, at: Vector2) -> int:
@@ -239,7 +239,7 @@ func craft_bag_slot_at(vs: Vector2, at: Vector2) -> int:
 
 func draw_craft_bag(c, vs: Vector2, me, mouse: Vector2) -> void:
 	var p = craft_panel_rect(vs)
-	main.text(c, p.position + Vector2(20, 330), "YOUR BAG", 11, GOLD, 0, -1, true)
+	main.text(c, p.position + Vector2(20, 330 if me[7].size() <= 8 else 322), InventoryUi.bag_title(me), 11, GOLD, 0, -1, true)
 	var slots = craft_bag_slots(vs)
 	var drag = main.inventory.drag_from
 	for i in range(slots.size()):
@@ -352,13 +352,14 @@ func draw_craft_card(c, me, i: int, card: Rect2, mouse: Vector2, busy: int) -> v
 		c.draw_rect(Rect2(badge - Vector2.ONE * 7, Vector2.ONE * 14), Color("317B55"))
 		c.draw_rect(Rect2(badge - Vector2(2, 5), Vector2(4, 10)), Color("DDF2D6"))
 		c.draw_rect(Rect2(badge - Vector2(5, 2), Vector2(10, 4)), Color("DDF2D6"))
-	var icon = Vector2(card.get_center().x, card.position.y + 31)
-	c.draw_circle(icon, 22.0, Color(1, 1, 1, 0.02 if locked else 0.05))
-	main.inventory.draw_item_icon(c, id, icon, 2.0)
+	var compact: bool = card.size.y < CARD_H
+	var icon = Vector2(card.get_center().x, card.position.y + (26 if compact else 31))
+	c.draw_circle(icon, 16.0 if compact else 22.0, Color(1, 1, 1, 0.02 if locked else 0.05))
+	main.inventory.draw_item_icon(c, id, icon, 1.5 if compact else 2.0)
 	var n: int = int(r[4])
 	if n > 1 and id != "base":
 		main.text(c, icon + Vector2(14, 19), "x" + str(n), 10, Color.WHITE, 0, -1.0, true)
-	main.text(c, Vector2(card.position.x, card.position.y + 64), Cs.s(r[0]), 11, Color(1, 1, 1, 0.4) if locked else Color.WHITE, 1, card.size.x)
+	main.text(c, Vector2(card.position.x, card.position.y + (47 if compact else 64)), Cs.s(r[0]), 10 if compact else 11, Color(1, 1, 1, 0.4) if locked else Color.WHITE, 1, card.size.x)
 	# the cost as small icons, red where you carry too little
 	var cost = r[1]
 	var parts: int = cost.size()
@@ -367,8 +368,8 @@ func draw_craft_card(c, me, i: int, card: Rect2, mouse: Vector2, busy: int) -> v
 	for res in cost:
 		var need: int = int(cost[res])
 		var enough: bool = main.survival_feedback.craft_have_local(me, Cs.s(res)) >= need
-		main.inventory.draw_item_icon(c, res, Vector2(x + 10, card.position.y + 79), 1.0)
-		main.text(c, Vector2(x + 20, card.position.y + 84), Cs.s(need), 10, Color.WHITE if enough else Color(1, 0.55, 0.5))
+		main.inventory.draw_item_icon(c, res, Vector2(x + 10, card.end.y - 13), 1.0)
+		main.text(c, Vector2(x + 20, card.end.y - 8), Cs.s(need), 10, Color.WHITE if enough else Color(1, 0.55, 0.5))
 		x += each
 	if locked:
 		c.draw_rect(card, Color(0, 0, 0, 0.45))
@@ -461,13 +462,9 @@ func craft_mouse(ev) -> bool:
 	if ev.pressed:
 		var vs: Vector2 = Vector2(main.hud.size)
 		var mouse: Vector2 = Vector2(main.hud.get_local_mouse_position())
-		for category in range(2):
+		for category in range(3):
 			if craft_category_button(vs, category).has_point(mouse):
 				select_craft_category(category)
-				return true
-		for t in range(3):
-			if craft_tier_button(vs, t).has_point(mouse):
-				select_craft_tier(t)
 				return true
 		for i in craft_choices():
 			if self.craft_card(vs, i).has_point(mouse):

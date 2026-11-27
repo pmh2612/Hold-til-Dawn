@@ -34,7 +34,7 @@ func _ready() -> void:
 			var anim = info.anims[name]
 			var first: int = int(anim[0])
 			var count: int = int(anim[1])
-			if first < 30 or (first + count) * size > im.get_width() or im.get_height() != 8 * size:
+			if first < 30 or (first + count) * size > im.get_width() or im.get_height() < 8 * size:
 				Cs.fail("Invalid sheet bounds")
 				return
 			for dir in range(8):

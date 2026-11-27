@@ -91,7 +91,9 @@ func draw_interaction_hint(c, vs, me, ph) -> void:
 					hint = "F: enter"
 	if hint != "":
 		if not gathering_hint and me[22] != "gather":
-			main.text(c, Vector2(0, vs.y - 74), hint, 13, GOLD, 1, vs.x)
+			var at := Vector2(0, vs.y - 74)
+			c.draw_string_outline(main.font_ui, at, hint, HORIZONTAL_ALIGNMENT_CENTER, vs.x, 13, 3, Color.BLACK)
+			c.draw_string(main.font_ui, at, hint, HORIZONTAL_ALIGNMENT_CENTER, vs.x, 13, Color("FF4C42"))
 
 # Gameplay keys (F3 and zoom stay in Main.cs). Each key sends one action string to GameSim.Action.
 func gameplay_key(code) -> void:
@@ -121,15 +123,19 @@ func gameplay_key(code) -> void:
 		var me = main.snap.ps.get(main.my_id)
 		if not main.craft_open:
 			var at_radio: bool = me != null and int(me[5]) == 0 and main.inventory.in_base_local(me) and SimWorld.near_radio(Vector2(main.local_pos))
-			if not at_radio and not main.inventory.at_bench_local(me):
+			if me == null or int(me[5]) != 0:
 				return
 			main.craft_panel.radio_mode = at_radio
+			main.craft_panel.field_mode = not at_radio and not main.inventory.at_bench_local(me)
+			if main.craft_panel.field_mode:
+				main.craft_panel.select_craft_category(1)
+				main.craft_panel.craft_sel = 9
 			if at_radio:
 				main.act("radio_open")
 		main.craft_open = not main.craft_open
 		main.build_menu.close_build()
 		main.minimap.map_big = false
-		main.craft_panel.select_craft_tier(main.craft_panel.craft_tier)
+		main.craft_panel.select_craft_category(main.craft_panel.craft_category)
 		main.inventory.bag_open = false
 		main.exploration_chests.bag_exploration_chest = -1
 		main.inventory.drag_from = null
@@ -176,7 +182,7 @@ func gameplay_right_click() -> void:
 	var me = main.snap.ps.get(main.my_id)
 	var slot = null if me == null else me[7][int(me[25])]
 	var use: bool = slot != null and SimTacticalItems.is_tactical_use(Cs.s(slot[0]))
-	main.act("use_item" if use else "flask", main.get_global_mouse_position())
+	main.act("use_item" if use else "use_healing_flask", main.get_global_mouse_position())
 
 func draw_controls(c, vs: Vector2, _me) -> void:
 	if help_open:

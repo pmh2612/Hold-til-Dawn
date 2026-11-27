@@ -11,6 +11,7 @@ const MAX_SUMMONS: int = 4
 const BASIC_DAMAGE: float = 12.0
 const BASIC_INTERVAL: float = 1.2
 const STRUCTURE_INTERVAL: float = 2.0
+const HUNT_RADIUS: float = GameSim.SCOUT_NIGHT_SIGHT * 2.0
 
 # constants shared with GameSim
 const BIO_CANNON = GameSim.BIO_CANNON
@@ -57,8 +58,10 @@ static func setup_boss(sim: GameSim, e, kind: int) -> void:
 	# Smaller, more frequent structure hits preserve 15 base DPS. Gatebreaker's signature stays 120 / 8 s.
 	e.dmg = boss_damage(sim, 30.0)
 	e.slam = boss_damage(sim, 40.0)
-	e.slam_cd = 3.0
+	e.slam_cd = 3.0 if kind == JUGGERNAUT else INF
+	e.slam_at = -99.0
 	e.sig_cd = 4.0
+	e.blow_cd = 0.0
 	e.act = ""
 	e.act_t = 0.0
 	e.face = (GameSim.DOOR_POS[e.door] - e.pos).angle()
@@ -66,6 +69,7 @@ static func setup_boss(sim: GameSim, e, kind: int) -> void:
 	# through a door gap (2.4 tiles) once the door is broken
 	e.r = 1.1 * T
 	e.dash_hit = []
+	e.exposed_until = 0.0
 
 # --- damage rules -------------------------------------------------------
 static func hittable(sim: GameSim, e) -> bool:
@@ -73,7 +77,7 @@ static func hittable(sim: GameSim, e) -> bool:
 	return not (e.type == BOSS and e.get("act", "") in ["burrow", "surface"])
 
 static func boss_damage_taken(sim: GameSim, e, dmg, from) -> Variant:
-	if e.type != BOSS or int(e.kind) != IRONHIDE or e.get("act", "") == "stagger":
+	if e.type != BOSS or int(e.kind) != IRONHIDE or e.get("act", "") == "stagger" or float(e.get("exposed_until", 0.0)) > sim.clock:
 		return dmg
 	# Ironhide: hits from its front 120 degrees deal 30% damage
 	var off: float = absf(angle_difference(float(e.face), (from - e.pos).angle()))
@@ -92,12 +96,103 @@ static func boss_act(sim: GameSim, e, act, time: float) -> void:
 	if cue != "":
 		SimAudio.emit(sim, cue, e.pos, -int(e.id) - 1)
 
-# Whom the boss's signature move aims at: the player it retaliates against, else the nearest one it sees.
+# All seven bosses sense the nearest reachable living player in a 13-tile radius.
+# Obstacles are navigated around; actual melee/projectile collision still enforces walls.
 static func boss_target(sim: GameSim, e) -> Variant:
+	return SimEnemies.nearest_player(sim, e.pos, HUNT_RADIUS, false)
+
+# Cheap distance comparisons only. Navigation remains cached and budgeted by SimEnemies.
+static func choose_target(sim: GameSim, e) -> void:
+	var previous = [e.state, e.target, e.get("tw", -1), e.door]
+	var p = boss_target(sim, e)
+	e.target = 0
+	e.goal_reach = e.r + T
+	if p != null:
+		e.state = 1
+		e.target = p.id
+		e.goal = p.pos
+		e.goal_reach = e.r + 0.55 * T
+	else:
+		var distance: float = INF
+		e.state = 0
+		e.goal = e.pos
+		var inside: bool = SimWorld.inside_base(e.pos)
+		if inside and sim.base_hp > 0:
+			distance = e.pos.length()
+			e.state = 3
+			e.goal = Vector2.ZERO
+			e.goal_reach = 2.5 * T
+		for i in range(GameSim.DOOR_POS.size()):
+			var at: Vector2 = GameSim.DOOR_POS[i]
+			if sim.doors[i] > 0:
+				var d: float = e.pos.distance_to(at)
+				if d < distance:
+					distance = d
+					e.state = 2
+					e.door = i
+					e.goal = at + GameSim.DOOR_DIR[i] * (e.r + 0.2 * T) * (-1.0 if inside else 1.0)
+					e.goal_reach = e.r + T
+			elif not inside and sim.base_hp > 0:
+				# The generator is reachable through a breach; include the entry leg in distance.
+				var d: float = e.pos.distance_to(at) + at.length()
+				if d < distance:
+					distance = d
+					e.state = 3
+					e.door = i
+					e.goal = Vector2.ZERO
+					e.goal_reach = 2.5 * T
+		for tw in sim.towers:
+			if tw == null or tw.hp <= 0:
+				continue
+			var d: float = e.pos.distance_to(tw.pos)
+			if d < distance:
+				distance = d
+				e.state = 5
+				e.tw = tw.slot
+				e.goal = tw.pos
+				e.goal_reach = e.r + 0.7 * T + 2.0
+	if previous != [e.state, e.target, e.get("tw", -1), e.door]:
+		e.nav_t = 0.0
+		e.erase("nav_way")
+
+static func tick_hunt(sim: GameSim, e, dt: float) -> void:
+	# Finish committed telegraphs against their original target. Then resume hunting on this tick.
+	var was_busy: bool = e.act != ""
+	if not was_busy:
+		choose_target(sim, e)
+	if tick_boss(sim, e, dt):
+		return
+	if was_busy:
+		choose_target(sim, e)
+	var old: Vector2 = e.pos
 	var p = sim.players.get(e.target) if e.state == 1 else null
-	if p != null and p.state == 0:
-		return p
-	return SimEnemies.nearest_player(sim, e.pos, 8.0 * T)
+	var arrived: bool
+	if e.state == 2:
+		arrived = e.pos.distance_to(GameSim.DOOR_POS[e.door]) <= e.goal_reach
+	else:
+		arrived = e.pos.distance_to(e.goal) <= e.goal_reach
+		if e.state == 1:
+			arrived = arrived and SimWorld.line_clear(sim, e.pos, p.pos)
+		elif e.state == 5:
+			arrived = arrived and SimWorld.line_clear(sim, e.pos, e.goal, e.goal)
+		elif e.state == 3:
+			arrived = arrived and SimWorld.inside_base(e.pos)
+	if not arrived:
+		var way: Vector2 = SimEnemies.enemy_waypoint(sim, e, e.goal, false)
+		e.pos = SimWorld.move_actor(sim, old, old + (way - old).normalized() * minf(e.spd * dt, old.distance_to(e.goal)), e.r)
+	elif e.cd <= 0:
+		var aim: Vector2 = GameSim.DOOR_POS[e.door] if e.state == 2 else e.goal
+		e.face = (aim - e.pos).angle()
+		if p != null:
+			SimEnemies.melee_attack(sim, e, p)
+		elif e.state == 5:
+			SimEnemies.tower_attack(sim, e, sim.towers[e.tw])
+		elif e.state in [2, 3]:
+			SimEnemies.enemy_attack(sim, e, null)
+	boss_slam(sim, e, dt)
+	if e.pos.distance_to(old) > 0.5:
+		e.face = (e.pos - old).angle()
+	SimEnemies.tick_blocked(sim, e, old, arrived, dt)
 
 static func add_telegraph(sim: GameSim, kind, pos: Vector2, r: float, dmg: float, extra = null) -> void:
 	var tl = {"kind": kind, "pos": pos, "r": r, "t": TELEGRAPH, "dur": TELEGRAPH, "dmg": dmg, "end": pos, "ang": 0.0, "spread": TAU}
@@ -107,17 +202,19 @@ static func add_telegraph(sim: GameSim, kind, pos: Vector2, r: float, dmg: float
 	sim.tele.append(tl)
 	SimAudio.emit(sim, "boss_warn", pos)
 
-# BAL-38: a 40-damage slam of radius 3 every 6 s when a player is close; the boss stands still while it lands.
+# Juggernaut alone uses the 40-damage, three-tile ground slam.
 static func boss_slam(sim: GameSim, e, dt) -> void:
+	if int(e.kind) != JUGGERNAUT:
+		return
 	e.slam_cd -= dt
 	if e.slam_cd > 0 or e.act != "":
 		return
-	for p in sim.players.values():
-		if p.state == 0 and p.pos.distance_to(e.pos) < 3 * T:
-			start_slam(sim, e)
-			return
+	if SimEnemies.nearest_player(sim, e.pos, 3 * T) != null:
+		start_slam(sim, e)
 
 static func start_slam(sim: GameSim, e) -> void:
+	if int(e.kind) != JUGGERNAUT:
+		return
 	add_telegraph(sim, "circle", e.pos, 3 * T, float(e.slam))
 	e.slam_cd = boss_cooldown(sim, 6.0)
 	boss_act(sim, e, "slam", TELEGRAPH)
@@ -125,9 +222,14 @@ static func start_slam(sim: GameSim, e) -> void:
 # Runs the boss's current move; returns true while the boss is busy (it then skips walking and door hits).
 static func tick_boss(sim: GameSim, e, dt) -> bool:
 	e.sig_cd -= dt
+	e.blow_cd = maxf(0.0, float(e.get("blow_cd", 0.0)) - dt)
 	e.shown = e.get("shown", 0.0) - dt
 	var kind: int = int(e.kind)
 	var act = e.act
+	# Old saved/test states must not reintroduce a post-attack movement lock.
+	if act in ["recover", "stagger", "climb"]:
+		boss_act(sim, e, "", 0.0)
+		return false
 	if act == "cloak":
 		return tick_cloak(sim, e, dt)
 	if act != "":
@@ -168,7 +270,7 @@ static func tick_boss(sim: GameSim, e, dt) -> bool:
 		boss_act(sim, e, "burrow", 3.0)
 		e.sig_cd = boss_cooldown(sim, 10.0)
 		return true
-	if kind == PHANTOM:
+	if kind == PHANTOM and p != null:
 		e.burrow = p.id if p != null else 0
 		boss_act(sim, e, "cloak", 4.0)
 		e.sig_cd = boss_cooldown(sim, 12.0)
@@ -179,13 +281,9 @@ static func finish_act(sim: GameSim, e, act) -> void:
 	var kind: int = int(e.kind)
 	boss_act(sim, e, "", 0.0)
 	if act == "slam":
+		e.slam_at = sim.clock
 		SimAudio.emit(sim, "boss_slam", e.pos, -int(e.id) - 1)
-		# Juggernaut: 2 s recovery after the slam; Ironhide: 3 s stagger with full damage from every side
-		if kind == JUGGERNAUT and e.get("dashed", false):
-			e.dashed = false
-			boss_act(sim, e, "recover", 2.0)
-		elif kind == IRONHIDE:
-			boss_act(sim, e, "stagger", 3.0)
+		e.dashed = false
 	elif act == "charge_wind":
 		boss_act(sim, e, "charge", 10.0)
 	elif act == "glow" and kind == BROODMOTHER:
@@ -199,7 +297,7 @@ static func finish_act(sim: GameSim, e, act) -> void:
 			sim.proj.append({"pos": e.pos + dir * e.r, "vel": dir * 4.0 * T, "dmg": boss_damage(sim, 12.0), "ttl": 2.0, "kind": "orb"})
 	elif act == "surface":
 		e.pos = e.surface
-		boss_act(sim, e, "climb", 1.5)
+		SimAudio.emit(sim, "boss_surface", e.pos, -int(e.id) - 1)
 	elif act == "ambush":
 		e.shown = 3.0
 	elif act == "blow":
@@ -208,12 +306,13 @@ static func finish_act(sim: GameSim, e, act) -> void:
 			SimEnemies.damage_tower(sim, e, tw, boss_damage(sim, 120.0))
 		elif e.state != 5:
 			SimEnemies.damage_door(sim, e, boss_damage(sim, 120.0))
+		e.cd = STRUCTURE_INTERVAL
 
 static func tick_charge(sim: GameSim, e, dt) -> bool:
 	var old: Vector2 = Vector2(e.pos)
 	var step: float = minf(9.0 * T * dt, e.dash_left)
 	var want: Vector2 = old + e.dash * step
-	e.pos = SimWorld.push_out(SimWorld.move_actor(sim, old, want, e.r), e.r)
+	e.pos = SimWorld.move_actor(sim, old, want, e.r)
 	e.dash_left -= step
 	# 35 damage and knockback to anyone on the line, once per dash
 	for p in sim.players.values():
@@ -228,19 +327,19 @@ static func tick_charge(sim: GameSim, e, dt) -> bool:
 	return true
 
 static func tick_burrow(sim: GameSim, e, dt) -> bool:
-	var p = sim.players.get(e.burrow)
+	var p = boss_target(sim, e)
 	var lost: bool = p == null or p.state != 0
 	if not lost:
 		# underground it closes in fast and cannot be hit or hit doors
 		var old: Vector2 = Vector2(e.pos)
-		e.pos = SimWorld.push_out(SimWorld.move_actor(sim, old, old + (p.pos - old).limit_length(e.spd * 2.0 * dt), e.r), e.r)
+		e.pos = SimWorld.move_actor(sim, old, old + (p.pos - old).limit_length(e.spd * 2.0 * dt), e.r)
 	if e.act_t > 0 and not lost and e.pos.distance_to(p.pos) > 2.5 * T:
 		return true
 	# surfaces at least 1.5 tiles from its target behind a 1.0 s dirt telegraph of radius 2 tiles
 	var spot: Vector2 = Vector2(e.pos)
 	if not lost:
 		var away: Vector2 = (e.pos - p.pos).normalized() if e.pos.distance_to(p.pos) > 1.0 else Vector2.RIGHT
-		spot = SimWorld.push_out(sim.world.resolve(p.pos + away * (1.5 * T), e.r), e.r)
+		spot = SimWorld.move_actor(sim, e.pos, p.pos + away * (1.5 * T), e.r)
 	e.surface = spot
 	add_telegraph(sim, "circle", spot, 2.0 * T, boss_damage(sim, SIGNATURE_HIT))
 	boss_act(sim, e, "surface", TELEGRAPH)
@@ -248,18 +347,14 @@ static func tick_burrow(sim: GameSim, e, dt) -> bool:
 
 static func tick_cloak(sim: GameSim, e, dt) -> bool:
 	e.act_t -= dt
-	var p = sim.players.get(e.burrow)
-	if p == null or p.state != 0:
-		p = boss_target(sim, e)
+	var p = boss_target(sim, e)
 	if p == null:
-		if e.act_t <= 0:
-			boss_act(sim, e, "", 0.0)
-		# invisible but still walking to its door; it does not hit doors while cloaked
+		# No ambush target remains: immediately return to attacking the nearest structure.
+		boss_act(sim, e, "", 0.0)
 		return false
 	var old: Vector2 = Vector2(e.pos)
 	if old.distance_to(p.pos) > 1.5 * T:
-		e.pos = SimWorld.move_actor(sim, old, old + (SimEnemies.enemy_waypoint(sim, e, p.pos) - old).normalized() * e.spd * dt, e.r)
-		e.pos = SimWorld.push_out(e.pos, e.r)
+		e.pos = SimWorld.move_actor(sim, old, old + (SimEnemies.enemy_waypoint(sim, e, p.pos, false) - old).normalized() * e.spd * dt, e.r)
 	if old.distance_to(p.pos) <= 2.0 * T or e.act_t <= 0:
 		# the ambush telegraph reveals it: a 1.0 s arc, then 35 damage in a 1.5-tile arc
 		e.face = (p.pos - e.pos).angle()
@@ -291,11 +386,12 @@ static func boss_hits_doors(sim: GameSim, e) -> bool:
 
 # The Gatebreaker's door blow: a 1.0 s wind-up, then 120 damage in one hit, every 8 s.
 static func start_blow(sim: GameSim, e) -> bool:
-	if e.type != BOSS or int(e.kind) != GATEBREAKER:
+	if e.type != BOSS or int(e.kind) != GATEBREAKER or float(e.get("blow_cd", 0.0)) > 0:
 		return false
 	add_telegraph(sim, "circle", e.pos + Vector2.from_angle(float(e.face)) * e.r, 1.0 * T, 0.0)
 	boss_act(sim, e, "blow", TELEGRAPH)
-	e.cd = boss_cooldown(sim, 8.0)
+	e.blow_cd = boss_cooldown(sim, 8.0)
+	e.cd = TELEGRAPH
 	return true
 
 # Boss state for the client: "" or the current move (cloak, burrow, glow, stagger, ...).
@@ -303,6 +399,8 @@ static func boss_look(sim: GameSim, e) -> Variant:
 	if e.type != BOSS:
 		return ""
 	var act = e.act
+	if act == "" and float(e.get("exposed_until", 0.0)) > sim.clock:
+		return "exposed"
 	if act == "" and e.get("shown", 0.0) > 0:
 		return "shown"
 	return act

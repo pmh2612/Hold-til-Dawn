@@ -44,6 +44,13 @@ static func loaded(s) -> int:
 static func bow_slot(arrows_: int) -> Variant:
 	return ["bow", 1, arrows_]
 
+static func use_bow_arrow(p) -> bool:
+	var selected = p.inv[int(p.sel)]
+	if is_bow(selected) and loaded(selected) > 0:
+		p.inv[int(p.sel)] = bow_slot(loaded(selected) - 1)
+		return true
+	return take_from(p.inv, "arrow", 1)
+
 # Loads up to N arrows into the bows of a slot array; returns what did not fit.
 static func load_arrows(slots, n: int) -> int:
 	var i: int = 0
@@ -158,6 +165,9 @@ static func take(sim: GameSim, p, id, n) -> bool:
 
 # Puts items in the inventory; whatever does not fit is dropped at the player's feet.
 static func add_item(sim: GameSim, p, id, n) -> void:
+	if kind_of(id) == "bag":
+		equip_bag(p, id)
+		return
 	# armour is worn at once and takes no bag slot
 	if kind_of(id) == "armour":
 		p.armour = maxi(int(p.armour), GameSim.ARMOUR_ITEMS.find(id))
@@ -175,13 +185,24 @@ static func set_count(sim: GameSim, p, id, n) -> void:
 
 static func give_starting_kit(sim: GameSim, p) -> void:
 	# Team change to BAL-42: no basic weapon item; everyone fights bare-handed when the selected slot holds
-	# no weapon. Scout: starter bow; Engineer: hammer; Healer: empty hands (the flasks are not an item).
+	# No weapon. Scout: starter bow; Engineer: hammer; Healer: empty hands.
 	p.inv = empty_slots(INV_SLOTS)
+	p.bag_tier = 0
 	if p.role == 0:
 		p.inv[0] = ["starter_bow", 1]
 	elif p.role == 2:
 		p.inv[0] = ["hammer", 1]
 	p.sel = 0
+
+# Upgrades replace the worn bag: bonuses are totals, never cumulative. Keep every slot.
+static func equip_bag(p, id: String) -> void:
+	var tier: int = GameSim.BAG_ITEMS.find(id)
+	if tier <= int(p.get("bag_tier", 0)):
+		return
+	p.bag_tier = tier
+	var capacity: int = INV_SLOTS + int(GameSim.BAG_BONUS[tier])
+	while p.inv.size() < capacity:
+		p.inv.append(null)
 
 # The weapon in hand: the item in the selected hotbar slot if it is a weapon, otherwise bare hands.
 static func weapon_of(sim: GameSim, p) -> Variant:
@@ -259,10 +280,20 @@ static func move_slot(sim: GameSim, p, arg) -> void:
 	# A radio part cannot be swapped into a backpack or another container by the reverse direction.
 	if component >= 0 or sb != null and GameSim.COMPONENT_IDS.find(Cs.s(sb[0])) >= 0:
 		return
+	if to_box == "inv" and kind_of(sa[0]) == "bag":
+		if GameSim.BAG_ITEMS.find(sa[0]) > int(p.get("bag_tier", 0)):
+			from[a] = null
+			equip_bag(p, sa[0])
+		return
+	# Starter bows never accept ammunition; full crafted bows keep both slots intact.
+	if sb != null and ((sa[0] == "arrow" and sb[0] == "starter_bow") or (sb[0] == "arrow" and sa[0] == "starter_bow")):
+		return
 	# arrows dropped on a bow (or a bow on arrows) are loaded into it
 	var bow = sb if is_bow(sb) else sa if is_bow(sa) else null
 	var ammo = sa if is_bow(sb) else sb
-	if bow != null and ammo != null and ammo[0] == "arrow" and loaded(bow) < QUIVER:
+	if bow != null and ammo != null and ammo[0] == "arrow":
+		if loaded(bow) >= QUIVER:
+			return
 		var put: int = mini(int(ammo[1]), QUIVER - loaded(bow))
 		var rest_ = ["arrow", int(ammo[1]) - put] if int(ammo[1]) - put > 0 else null
 		var full = bow_slot(loaded(bow) + put)

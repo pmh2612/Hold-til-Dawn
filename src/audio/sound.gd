@@ -456,8 +456,6 @@ func player_changes(old: Dictionary, d: Dictionary, exact: bool) -> void:
 			sfx("heal", at, -10., .02, 0, id)
 		if not exact and p[11] and not o[11]:
 			sfx("bow" if p[8] in ["bow", "starter_bow"] else "attack_basic", at, -8.)
-		if p[10] < o[10]:
-			sfx("flask", at, -8.)
 		if p[13] > 0 and o[13] <= 0:
 			sfx("herb", at, -13.)
 		if p[30] and not o[30]:

@@ -11,12 +11,31 @@ static var ENEMY_TINT = [Color.WHITE, Color.WHITE, Color.WHITE, Color.WHITE]
 static var BOSS_SKIN = ["boss_juggernaut", "boss_broodmother", "boss_bio_cannon", "boss_burrower", "boss_gatebreaker", "boss_phantom", "boss_ironhide"]
 # boss moves with a wind-up: it holds the first attack frame (arms up) until the move lands
 static var BOSS_WIND = {"glow": true, "charge_wind": true, "blow": true, "slam": true, "ambush": true}
+
+# Snapshot fields 12/13 carry remaining special time and elapsed time since the slam landed.
+# These clips contain the whole boss body, not a separate effect over the idle sprite.
+static func boss_skill_animation(e: Array) -> Array:
+	if int(e[1]) != GameSim.BOSS or int(e[6]) != GameSim.JUGGERNAUT:
+		return []
+	var look: String = Cs.s(e[7])
+	var left: float = float(e[12]) if e.size() > 12 else SimBosses.TELEGRAPH
+	if look == "slam":
+		return ["slam_wind", clampf(SimBosses.TELEGRAPH - left, 0, 0.999), false]
+	if look == "charge_wind":
+		return ["charge_wind", clampf(SimBosses.TELEGRAPH - left, 0, 0.999), false]
+	if look == "charge":
+		return ["charge_run", 0.0, true]
+	var impact_age: float = float(e[13]) if e.size() > 13 else 99.0
+	if impact_age >= 0 and impact_age < 0.25:
+		return ["slam_hit", impact_age, false]
+	return []
 # a dead enemy plays its "down" frames where it fell, lies there, then fades (seconds)
 const CORPSE_TIME: float = 2.4
 # a dead enemy plays its "down" frames where it fell, lies there, then fades (seconds)
 const CORPSE_FADE: float = 0.6
 # 3x replaces 2x: every boss, including attacks and corpses, is 1.5 times its former size.
-# Integer scaling preserves the pixel edges; gameplay collision/reach still use the simulation radius.
+# This is a world-space scale; boss sheets use 3 texels per logical unit so each
+# displayed pixel is the same world size as an Engineer pixel.
 const BOSS_DRAW_SCALE: float = 3.0
 # what each enemy on screen was last drawn as (by id), so it can fall over where it died
 var en_seen = {}
@@ -128,7 +147,8 @@ func draw_enemy(e, foot) -> void:
 		main.draw_circle(foot - Vector2(0, 6), e[5] * 0.35, Color("7A6046"))
 		return
 	# the character's own size (the sheet cell has room around it for its attack)
-	var size: float = float(main.cinfo.chars[skin].get("body", main.cinfo.chars[skin].size))
+	var art = main.cinfo.chars[skin]
+	var size: float = float(art.get("body", art.size)) / float(art.get("resolution", 1.0))
 	# GDD size in tiles over the sprite's own size: the 40 px Wrecker is drawn 1:1. A boss is drawn much bigger
 	# than its body (BOSS_DRAW_SCALE), so it towers over the players but still fits through a door.
 	var s: float = BOSS_DRAW_SCALE if ty == GameSim.BOSS else float(e[5] / (0.5 * T) * 32.0 / size)
@@ -138,7 +158,7 @@ func draw_enemy(e, foot) -> void:
 		# wind-ups glow; recovery, stagger and climb-out (the weak windows) look dim
 		if look == "glow" or look == "charge_wind" or look == "blow" or look == "slam" or look == "ambush":
 			mod_ = mod_.lerp(Color(2.2, 1.6, 0.6), 0.5 + 0.5 * sin(main.clock * 18.0))
-		elif look == "recover" or look == "stagger" or look == "climb":
+		elif look in ["recover", "stagger", "climb", "exposed"]:
 			mod_ = mod_.darkened(0.35)
 		elif look == "shown":
 			mod_ = mod_.lerp(Color(0.8, 0.7, 1.0), 0.4)
@@ -153,6 +173,7 @@ func draw_enemy(e, foot) -> void:
 	# wind-up and strikes when the move lands
 	var play = null
 	var play_t: float = 0.0
+	var loop: bool = false
 	var now: float = float(main.clock)
 	var start: float = main.anim.swing_start(key_, e.size() > 9 and e[9])
 	if ty == GameSim.BOSS and BOSS_WIND.has(look):
@@ -167,7 +188,14 @@ func draw_enemy(e, foot) -> void:
 		if from >= 0 and now - from < main.anim.anim_length(skin, "attack"):
 			play = "attack"
 			play_t = now - from
-	main.player_view.char_(key_, skin, foot, float(e[8]) if ty == GameSim.BOSS else null, s, mod_, play == "attack", "idle", play, play_t)
+	var skill: Array = boss_skill_animation(e)
+	if not skill.is_empty():
+		play = skill[0]
+		play_t = skill[1]
+		loop = skill[2]
+		winding.erase(key_)
+		strike_at.erase(key_)
+	main.player_view.char_(key_, skin, foot, float(e[8]) if ty == GameSim.BOSS else null, s, mod_, play == "attack" or not skill.is_empty(), play if not skill.is_empty() else "idle", play, play_t, loop)
 	if e.size() > 10 and e[10]:
 		var at: Vector2 = Vector2(foot) - Vector2(0, size * s * 0.65)
 		main.draw_arc(at, 9.0, 0, TAU, 12, Color("DDD681"), 2.0)

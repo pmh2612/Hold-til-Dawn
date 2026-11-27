@@ -86,6 +86,46 @@ func dev_args(args) -> void:
 			# --goto=x,y in tiles from the base centre, to look at a part of the island
 			var xy = a_.substr(7).split(",")
 			main.sim.teleport(me, Vector2(xy[0].to_float(), xy[1].to_float()) * T)
+		elif a_.begins_with("--night="):
+			# A playable night with the normal spawn director (unlike the lighting-only --night).
+			var number: int = clampi(a_.substr(8).to_int(), 1, 5)
+			main.sim.k = number
+			main.sim.unlock = 2 if number >= 3 else 1 if number >= 2 else 0
+			main.sim.enemies.clear()
+			main.sim.proj.clear()
+			main.sim.tele.clear()
+			if number == 5:
+				main.sim.rescue_components = [1, 1, 1]
+				main.sim.radio_parts_placed = [1, 1, 1]
+				main.sim.radio_built = true
+			main.sim.dawn()
+			main.sim.night()
+		elif a_ == "--rescue-preview":
+			# Final-night extension: pad A is already clear for 5 of the required 10 seconds.
+			main.sim.k = 5
+			main.sim.rescue_components = [1, 1, 1]
+			main.sim.radio_parts_placed = [1, 1, 1]
+			main.sim.radio_built = true
+			main.sim.enemies.clear()
+			main.sim.proj.clear()
+			main.sim.tele.clear()
+			main.sim.dawn()
+			main.sim.night()
+			main.sim.t = 0.0
+			main.sim.ext = 60.0
+			main.sim.pad_clear = [5.0, 0.0, 0.0]
+			main.sim.next_wave = INF
+			# Stationary blockers keep the other pads from progressing during this five-second review.
+			for i in [1, 2]:
+				var guard = main.sim.spawn(GameSim.GRUNT, i, 10)
+				guard.pos = SimWorld.pad_pos(i)
+				guard.stun_until = INF
+			main.sim.teleport(me, SimWorld.pad_pos(0) + Vector2(-T, T))
+			main.zoom_i = 0
+		elif a_ == "--win":
+			# Open the real post-rescue result screen without playing five nights.
+			main.sim.k = 5
+			SimPhases.end(main.sim, true, "Helicopter landed at pad A")
 		elif a_ == "--night":
 			# straight to night 1 with no waves, to look at the night colours; an Engineer standing in the base
 			# (--goto before it) stays inside
@@ -117,5 +157,4 @@ func dev_args(args) -> void:
 			main.sim.spawn_boss()
 			var b = main.sim.boss()
 			b.pos = GameSim.DOOR_POS[0] + GameSim.DOOR_DIR[0] * 9 * T
-			b.spd = 0.0
 			main.sim.teleport(me, b.pos + Vector2(2.5 * T, 0.5 * T))

@@ -102,25 +102,24 @@ func _ready() -> void:
 	var panel = game.craft_panel
 	var seen: Array = []
 	var vs = Vector2(960, 540)
-	for category in range(2):
+	for category in range(3):
 		panel.select_craft_category(category)
-		for tier in range(3):
-			panel.select_craft_tier(tier)
-			var choices: Array = panel.craft_choices()
-			check(not choices.is_empty() and choices.has(panel.craft_sel), "category %d tier %d selects a visible recipe" % [category, tier])
-			for k in range(choices.size()):
-				var i: int = choices[k]
-				var kind: String = SimInventory.kind_of(GameSim.RECIPES[i][3])
-				check((kind in ["weapon", "ammo"]) == (category == 0) and not seen.has(i), "recipe %d appears once in its correct category" % i)
-				seen.append(i)
-				check(panel.key_of(i) == str(k + 1), "recipe %d shortcut matches its visible position" % i)
-				var rect: Rect2 = panel.craft_card(vs, i)
-				check(rect.position.y > panel.craft_tier_button(vs, 0).end.y and rect.end.y < panel.craft_panel_rect(vs).position.y + 330 and rect.end.x < panel.craft_detail(panel.craft_panel_rect(vs)).position.x, "recipe %d fits between category tabs and bag" % i)
-	check(seen.size() == GameSim.RECIPES.size(), "all 16 recipes remain available across both categories")
+		var choices: Array = panel.craft_choices()
+		check(not choices.is_empty() and choices.has(panel.craft_sel), "category %d selects a visible recipe" % category)
+		for k in range(choices.size()):
+			var i: int = choices[k]
+			var kind: String = SimInventory.kind_of(GameSim.RECIPES[i][3])
+			check(CraftPanelUi.category_of(i) == category and not seen.has(i), "recipe %d appears once in its correct category" % i)
+			seen.append(i)
+			check(panel.key_of(i) == str(k + 1), "recipe %d shortcut matches its visible position" % i)
+			var rect: Rect2 = panel.craft_card(vs, i)
+			check(rect.position.y > panel.craft_category_button(vs, category).end.y and rect.end.y < panel.craft_panel_rect(vs).position.y + 330 and rect.end.x < panel.craft_detail(panel.craft_panel_rect(vs)).position.x, "recipe %d fits between the two tabs and bag" % i)
+			for other in choices:
+				check(other == i or not rect.intersects(panel.craft_card(vs, other)), "recipe %d does not overlap recipe %d" % [i, other])
+	check(seen.size() == GameSim.RECIPES.size() and seen.size() == 18, "all 18 recipes are visible across Weapons, Equipment and Armor, independent of unlock level")
 	check(game.inventory.item_label(["starter_bow", 1]).contains("Infinite") and game.inventory.item_label(["bow", 1, 7]).contains("7 / 30"), "starter and crafted bow show distinct ammunition information")
 	check(game.inventory.item_label(["explosive_arrow", 3]).contains("LMB") and panel.craft_desc("explosive_arrow").size() == 2, "explosive ammo explains bow requirement and firing control")
 	panel.select_craft_category(0)
-	panel.select_craft_tier(0)
 	p.inv = SimInventory.empty_slots(8)
 	p.note = ""
 	p.note_t = 0
@@ -132,30 +131,28 @@ func _ready() -> void:
 	check(p.craft_idx < 0 and p.note == "", "a stale craft request is rejected silently without spending materials")
 	for id in GameSim.RES:
 		s.set_count(p, id, 20)
-	game.craft_panel.select_craft_tier(1)
 	refresh(game, p)
-	press(game, KEY_2)
+	press(game, KEY_6)
 	check(p.craft_idx < 0 and p.note == "" and s.count(p, "wood") == 20, "locked-day recipe cannot be crafted by its shortcut even with enough materials")
-	s.unlock = 1
+	s.unlock = 0
 	refresh(game, p)
-	press(game, KEY_2)
-	check(p.craft_idx == 2, "the same craft shortcut enables after its tier unlocks")
+	press(game, KEY_4)
+	check(p.craft_idx == 2, "stone-tier bow is craftable from day one")
 	s.tick_craft(p, 3)
 	check(s.count(p, "bow") == 1 and s.count(p, "wood") == 14 and s.count(p, "titanium") == 18, "enabled recipe crafts normally and charges its material cost")
 	p.note = ""
 	p.note_t = 0
 	refresh(game, p)
 	game.craft_panel.select_craft_category(1)
-	press(game, KEY_2)
+	press(game, KEY_4)
 	check(p.craft_idx < 0 and p.note == "" and s.count(p, "herb") == 20, "Engineer flask shortcut stays disabled silently despite sufficient materials")
 	p.role = 1
 	refresh(game, p)
-	press(game, KEY_2)
+	press(game, KEY_4)
 	check(p.craft_idx == 13, "Healer flask shortcut enables at the unlocked workbench")
 	s.tick_craft(p, 3)
 	check(s.count(p, "healing_flask") == 1 and s.count(p, "herb") == 14 and s.count(p, "titanium") == 16, "Healer crafts one flask with the normal recipe cost")
 	p.role = 2
-	game.craft_panel.select_craft_tier(0)
 	p.inv = SimInventory.empty_slots(8)
 	s.set_count(p, "wood", 7)
 	s.set_count(p, "stone", 5)
@@ -168,6 +165,24 @@ func _ready() -> void:
 	game.craft_panel.craft_bag_mouse(Vector2(960, 540), slots[1].get_center(), true)
 	game.craft_panel.craft_bag_mouse(Vector2(960, 540), slots[1].get_center(), false)
 	check(p.sel == 1, "clicking an embedded hotbar slot selects it")
+	panel.select_craft_category(0)
+	p.inv = SimInventory.empty_slots(8)
+	s.unlock = 0
+	s.set_count(p, "wood", 6)
+	s.set_count(p, "stone", 4)
+	refresh(game, p)
+	press(game, KEY_1)
+	check(p.craft_idx == 16, "first Weapons shortcut starts the day-one hammer recipe")
+	s.tick_craft(p, 3)
+	check(s.count(p, "hammer") == 1 and s.count(p, "wood") == 0 and s.count(p, "stone") == 0, "hammer crafts in three seconds for six wood and four stone")
+	panel.select_craft_category(1)
+	p.inv = SimInventory.empty_slots(8)
+	s.set_count(p, "wood", 2)
+	s.set_count(p, "stone", 2)
+	refresh(game, p)
+	press(game, KEY_6)
+	check(p.craft_idx == 15, "sixth Equipment shortcut starts the chest key recipe")
+	s.tick_craft(p, 3)
 	press(game, KEY_C)
 	p.pos = GameSim.RADIO_POS + Vector2(0, 24)
 	refresh(game, p)
@@ -190,6 +205,7 @@ func _ready() -> void:
 	s.enemies.clear()
 	s.check_end(0.05)
 	check(s.phase == "day" and s.k == 2 and s.snapshot().msg == "", "clearing a night still advances dawn without Dawn comes early text")
+	check_inventory_upgrades(game, p)
 	game.rivers.build_river_looks()
 	for r in game.rivers.river_looks:
 		var points = r.water_mesh.points
@@ -210,3 +226,85 @@ func _ready() -> void:
 	await get_tree().process_frame
 	print("RADIO PANEL FAILED" if failed else "RADIO PANEL ALL OK: %d checks" % checks)
 	get_tree().quit(1 if failed else 0)
+
+func check_inventory_upgrades(game: Main, p) -> void:
+	var s: GameSim = game.sim
+	var panel = game.craft_panel
+	s.phase = "day"
+	s.unlock = 0
+	p.pos = GameSim.WORKBENCH_POS + Vector2(0, 24)
+	p.role = 2
+	p.inv = SimInventory.empty_slots(8)
+	p.bag_tier = 0
+	p.inv[0] = ["bandage", 3]
+	for res in GameSim.RES:
+		s.set_count(p, res, 20)
+	s.craft(p, 17)
+	s.tick_craft(p, 3)
+	check(p.bag_tier == 1 and p.inv.size() == 12, "the only backpack expands inventory from eight to twelve slots")
+	check(p.inv[0] == ["bandage", 3] and s.count(p, "backpack") == 0, "backpack equips without losing items or consuming a slot")
+	check(GameSim.BAG_ITEMS == ["", "backpack"] and GameSim.ITEMS.keys().filter(func(id): return SimInventory.kind_of(id) == "bag").size() == 1, "exactly one backpack exists in the item catalog")
+	check(not s.can_craft(p, 17, false), "equipped backpack cannot be crafted repeatedly")
+	var contents: Array = p.inv.duplicate(true)
+	SimInventory.equip_bag(p, "backpack")
+	check(p.inv.size() == 12 and p.inv == contents, "equipping the backpack twice adds no slots and changes no items")
+	refresh(game, p)
+	var slots: Array = panel.craft_bag_slots(Vector2(960, 540))
+	check(slots.size() == 12 and slots[-1].end.y < panel.craft_panel_rect(Vector2(960, 540)).end.y, "craft panel fits all twelve backpack slots")
+	game.inventory.bag_open = true
+	var bag_slots: Array = game.inventory.bag_slots(Vector2(960, 540), game.snap.ps[1])
+	check(bag_slots.filter(func(slot): return slot[0] == "inv").size() == 12, "Tab bag shows all twelve slots")
+	game.inventory.bag_open = false
+	p.inv[11] = ["herb", 1]
+	p.inv[10] = null
+	s.move_slot(p, ["inv", 11, "inv", 10])
+	check(p.inv[10] == ["herb", 1] and p.inv[11] == null, "the last expanded slot supports actual transfers")
+	p.inv = SimInventory.empty_slots(12)
+	p.inv[0] = ["bow", 1, 12]
+	p.inv[1] = ["arrow", 20]
+	s.move_slot(p, ["inv", 1, "inv", 0])
+	check(p.inv[0] == ["bow", 1, 30] and p.inv[1] == ["arrow", 2], "dragging arrows onto a bow fills it to 30 and keeps the remainder")
+	s.move_slot(p, ["inv", 1, "inv", 0])
+	check(p.inv[0] == ["bow", 1, 30] and p.inv[1] == ["arrow", 2], "a full bow never swaps with its ammo stack")
+	p.sel = 0
+	p.weapon = "bow"
+	p.atk_cd = 0
+	s.attack(p)
+	check(SimInventory.loaded(p.inv[0]) == 29 and p.inv[1] == ["arrow", 2], "shooting decrements the selected bow counter before loose ammo")
+	p.inv[0] = ["starter_bow", 1]
+	s.move_slot(p, ["inv", 1, "inv", 0])
+	check(p.inv[0] == ["starter_bow", 1] and p.inv[1] == ["arrow", 2], "Scout starter bow never accepts or swaps with normal arrows")
+	p.weapon = "starter_bow"
+	p.atk_cd = 0
+	s.attack(p)
+	check(p.inv[1] == ["arrow", 2], "Scout infinite bow does not consume normal arrows")
+	game.craft_open = false
+	refresh(game, p)
+	for slot in range(4):
+		var centre := Vector2((960 - 188) / 2.0 + slot * 48 + 22, 540 - 32)
+		check(game.inventory.begin_hotbar_selection(Vector2(960, 540), centre) and p.sel == slot, "clicking hotbar slot %d selects it" % (slot + 1))
+		check(not game.inventory.filter_primary_attack(true), "holding a hotbar click cannot attack or use an item")
+		game.inventory.filter_primary_attack(false)
+		check(game.inventory.filter_primary_attack(true), "a fresh world click can attack after releasing the hotbar")
+	game.craft_open = true
+	check(not game.inventory.begin_hotbar_selection(Vector2(960, 540), Vector2(408, 508)), "craft panel captures clicks before the world hotbar")
+	game.craft_open = false
+	p.pos = Vector2(0, 640)
+	for phase_ in ["day", "dusk", "night"]:
+		for role in range(3):
+			s.phase = phase_
+			p.role = role
+			p.inv = SimInventory.empty_slots(12)
+			s.set_count(p, "herb", 4)
+			s.set_count(p, "titanium", 4)
+			refresh(game, p)
+			press(game, KEY_C)
+			check(game.craft_open and panel.field_mode and panel.craft_sel == 9, "C outside base opens field Revival kit for %s during %s" % [GameSim.ROLES[role], phase_])
+			check(panel.craft_block(game.snap.ps[1], 9) == "" and not s.can_craft(p, 16, false), "field crafting permits revival while other equipment still needs the bench")
+			s.craft(p, 9)
+			s.tick_craft(p, 3)
+			check(s.count(p, "revive") == 1 and s.count(p, "herb") == 0, "Revival kit completes outside base by day or night for all roles")
+			press(game, KEY_C)
+	s.craft(p, 9)
+	SimPlayers.reset_player(s, p)
+	check(p.bag_tier == 0 and p.inv.size() == 8, "new player reset restores the starting eight-slot bag")

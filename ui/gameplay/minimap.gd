@@ -234,6 +234,7 @@ func _draw_minimap_to(p, focus, mid, scale) -> Vector2:
 # where each landmark's label sits on the large map, worked out once per map size
 var label_plan = []
 var label_plan_for: Rect2 = Rect2()
+var label_plan_world
 
 func draw_landmark_dots(ci, inside: Rect2, to, big: bool) -> void:
 	var w = main.geometry
@@ -242,7 +243,7 @@ func draw_landmark_dots(ci, inside: Rect2, to, big: bool) -> void:
 		var _c1 = l.id == 1
 		var at
 		if not _c1:
-			at = w.lm_at.get(l.id, Vector2.ZERO)
+			at = w.landmark_centre(l.id)
 			_c1 = not w.lm_at.has(l.id)
 		if _c1:
 			continue
@@ -255,8 +256,9 @@ func draw_landmark_dots(ci, inside: Rect2, to, big: bool) -> void:
 		return
 	var f = main.font_ui
 	var size: int = 10
-	if label_plan_for != inside or label_plan.size() == 0:
+	if label_plan_for != inside or label_plan.size() == 0 or not is_same(label_plan_world, w):
 		label_plan_for = inside
+		label_plan_world = w
 		label_plan.clear()
 		var dots = []
 		var order = []
@@ -264,7 +266,7 @@ func draw_landmark_dots(ci, inside: Rect2, to, big: bool) -> void:
 			var _c2 = l.id == 1
 			var at
 			if not _c2:
-				at = w.lm_at.get(l.id, Vector2.ZERO)
+				at = w.landmark_centre(l.id)
 				_c2 = not w.lm_at.has(l.id)
 			if _c2:
 				continue
@@ -310,11 +312,7 @@ func draw_landmark_dots(ci, inside: Rect2, to, big: bool) -> void:
 
 # the name of the landmark you just walked into, for a few seconds under the radio line
 func draw_here_name(c, vs) -> void:
-	var here = IslandMap.near(Vector2(main.local_pos), 8.0 * IslandMap.SCALE * float(T))
-	if main.geometry.in_cave_region(Vector2(main.local_pos)):
-		here = IslandMap.by_id(16)
-	if here != null and here.id == 1:
-		here = null
+	var here = main.geometry.near_landmark(Vector2(main.local_pos), 8.0 * IslandMap.SCALE * float(T))
 	var now: float = float(main.clock)
 	if here != here_now:
 		here_now = here

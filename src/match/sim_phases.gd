@@ -30,8 +30,6 @@ static func dawn(sim: GameSim) -> void:
 	for p in sim.players.values():
 		p.inside = false
 		p.entry = 0.0
-		if p.role == 1:
-			p.flasks = 3
 	var idx = [0, 1, 2]
 	idx.shuffle()
 	sim.active = idx.slice(0, mini(3, sim.k))

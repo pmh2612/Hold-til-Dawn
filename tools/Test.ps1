@@ -27,6 +27,8 @@ try {
     Invoke-Suite 'tests/ChestPatrolCheck.tscn' 'CHEST PATROL ALL OK' 'chest-patrol.log'
     Invoke-Suite 'tests/GameplayRefineCheck.tscn' 'GAMEPLAY REFINE ALL OK' 'gameplay-refine.log'
     Invoke-Suite 'tests/EnemyCombatCheck.tscn' 'ENEMY COMBAT ALL OK' 'enemy-combat.log'
+    Invoke-Suite 'tests/CombatReadabilityCheck.tscn' 'COMBAT READABILITY ALL OK' 'combat-readability.log'
+    Invoke-Suite 'tools/EnemyDesignPreview.tscn' 'ENEMY DESIGN ASSETS OK' 'enemy-art.log'
     Invoke-Suite 'tests/GeometryCheck.tscn' 'GEOMETRY ALL OK' 'geometry.log'
     Invoke-Suite 'tests/LandmarkGroundCheck.tscn' 'LANDMARK GROUND ALL OK' 'landmark-ground.log'
     Invoke-Suite 'tests/HarvestCheck.tscn' 'HARVEST ALL OK' 'harvest.log'

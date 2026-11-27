@@ -127,7 +127,8 @@ static func tick_enemy_bodies(sim: GameSim, dt) -> void:
 			continue
 		if e.get("slow_until", 0.0) > sim.clock:
 			dt = frame_dt * 0.75
-		if e.type == BOSS and SimBosses.tick_boss(sim, e, dt):
+		if e.type == BOSS:
+			SimBosses.tick_hunt(sim, e, dt)
 			index += 1
 			continue
 		# a Broodmother's summons vanish with it (BAL-43)
@@ -161,23 +162,18 @@ static func tick_enemy_bodies(sim: GameSim, dt) -> void:
 				SimPlayers.retarget(sim, e)
 			target_p = sim.players.get(e.target)
 			if target_p == null or target_p.state != 0 or target_p.inside and not SimPhases.any_breach(sim) or e.nodmg > 5.0 or e.pos.distance_to(e.anchor) > 12 * T:
-				# roamers go back to wandering by day; a boss ignores new threat for 10 s (BAL-35)
+				# Roamers return home; regular night enemies resume attacking structures.
 				e.state = 4 if e.has("home") else 0
 				e.hits.clear()
-				if e.type == BOSS:
-					e.calm = 10.0
 				target_p = null
 				if e.state == 4:
 					index += 1
 					continue
-		# Strike players in reach even while marching to a door or guarding a tower. Bosses used to
-		# have no basic player attack at all, leaving long idle gaps between their special moves.
+		# Regular enemies strike players in reach even while marching to a door or guarding a tower.
 		var close_player = nearest_player(sim, e.pos, e.r + 0.55 * T)
 		if close_player != null:
 			if e.cd <= 0:
 				melee_attack(sim, e, close_player)
-			if e.type == BOSS:
-				SimBosses.boss_slam(sim, e, dt)
 			index += 1
 			continue
 		if e.state == 0 and sim.phase == "night":
@@ -194,8 +190,6 @@ static func tick_enemy_bodies(sim: GameSim, dt) -> void:
 					e.pos += (enemy_waypoint(sim, e, tw.pos) - e.pos).normalized() * minf(e.spd * dt, e.pos.distance_to(tw.pos))
 				elif e.cd <= 0:
 					tower_attack(sim, e, tw)
-				if e.type == BOSS:
-					SimBosses.boss_slam(sim, e, dt)
 				e.pos = SimWorld.push_out(SimWorld.move_actor(sim, old_pos, e.pos, e.r), e.r)
 				index += 1
 				continue
@@ -220,10 +214,6 @@ static func tick_enemy_bodies(sim: GameSim, dt) -> void:
 			e.pos += (way - e.pos).normalized() * minf(e.spd * dt, e.pos.distance_to(goal))
 		elif e.cd <= 0:
 			enemy_attack(sim, e, target_p)
-		if e.type == BOSS:
-			SimBosses.boss_slam(sim, e, dt)
-			if e.pos.distance_to(old_pos) > 0.5:
-				e.face = (e.pos - old_pos).angle()
 		e.pos = SimWorld.move_actor(sim, old_pos, e.pos, e.r)
 		if outside:
 			e.pos = SimWorld.push_out(e.pos, e.r)
@@ -463,7 +453,7 @@ static func spawn_position(sim: GameSim, door: int, distance: float, any_side: b
 
 static func enemy_waypoint(sim: GameSim, e, goal, outside = null) -> Variant:
 	if outside == null: outside = true
-	if e.get("nav_t", 0.0) <= 0 or not e.has("nav_way") or e.pos.distance_to(e.nav_way) < 4.0 or e.get("nav_revision", -1) != sim.world.revision or e.get("nav_goal", Vector2.INF).distance_to(goal) > T:
+	if e.get("nav_t", 0.0) <= 0 or not e.has("nav_way") or e.pos.distance_to(e.nav_way) < 4.0 or e.get("nav_revision", -1) != sim.world.revision or e.get("nav_outside", true) != outside or e.get("nav_goal", Vector2.INF).distance_to(goal) > T:
 		if sim.limit_enemy_navigation and sim.enemy_navigation_updates_this_tick >= ENEMY_NAVIGATION_LIMIT:
 			# Never follow an obsolete route through newly built walls; wait for a fair turn instead.
 			return e.nav_way if e.has("nav_way") and e.get("nav_revision", -1) == sim.world.revision and e.get("nav_outside", true) == outside and e.pos.distance_to(e.nav_way) >= 4.0 else e.pos

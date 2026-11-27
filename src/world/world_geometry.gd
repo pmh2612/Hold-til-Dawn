@@ -815,6 +815,32 @@ func ensure_home_farm_resources(primary_count: int = 0) -> void:
 func soil_centre(soil) -> Vector2:
 	return WorldLandmarkDetails.soil_centre(self, soil)
 
+# UI locations follow the built scene, rather than the original placement hint or an entrance prop.
+# Keep lm_at as the entrance / interaction anchor used by gameplay and development teleport commands.
+func landmark_centre(id: int) -> Vector2:
+	if id == 16:
+		return cave_centre
+	if id == 8:
+		return swamp_centre
+	if id == 15 and not ponds.is_empty():
+		return ponds[0].centre
+	return lm_at.get(id, Vector2.INF)
+
+func near_landmark(p: Vector2, reach: float) -> Variant:
+	# The enlarged cave owns its complete rock footprint, including the eastern entrance.
+	if in_cave_region(p):
+		return IslandMap.by_id(16)
+	var best = null
+	var distance: float = reach * reach
+	for location in IslandMap.landmarks:
+		if not lm_at.has(location.id):
+			continue
+		var d: float = p.distance_squared_to(landmark_centre(location.id))
+		if d < distance:
+			distance = d
+			best = location
+	return null if best != null and best.id == 1 else best
+
 func bare_landmark_ground(p: Vector2) -> bool:
 	return WorldLandmarkDetails.bare_landmark_ground(self, p)
 

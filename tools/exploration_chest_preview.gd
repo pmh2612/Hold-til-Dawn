@@ -17,7 +17,7 @@ func _ready() -> void:
 	var p = game.sim.players[1]
 	var chest = game.sim.exploration_chests.filter(func(c): return c.landmark > 4)[0]
 	var camera = game.cam
-	var names = ["sealed", "unlocking", "opened", "storage", "radio-table", "radio-missing", "radio-parts", "radio-ready", "radio-build", "radio-online", "craft-basic", "craft-stone", "craft-titanium", "map"]
+	var names = ["sealed", "unlocking", "opened", "storage", "radio-table", "radio-missing", "radio-parts", "radio-ready", "radio-build", "radio-online", "craft-weapons", "craft-equipment", "craft-locked", "map"]
 	var stage: int = 0
 	while stage < names.size():
 		var name_: String = names[stage]
@@ -51,11 +51,11 @@ func _ready() -> void:
 			assert(game.sim.radio_built)
 		if crafting:
 			p.inter = false
-			game.sim.unlock = 2
+			game.sim.unlock = 0 if name_ == "craft-locked" else 2
 			for res in GameSim.RES:
 				game.sim.set_count(p, res, 20)
-			game.craft_panel.select_craft_tier(0 if name_ == "craft-basic" else 1 if name_ == "craft-stone" else 2)
-			game.craft_panel.craft_sel = 8 if name_ == "craft-basic" else 14 if name_ == "craft-stone" else 6
+			game.craft_panel.select_craft_category(0 if name_ != "craft-equipment" else 1)
+			game.craft_panel.craft_sel = 16 if name_ == "craft-weapons" else 9 if name_ == "craft-equipment" else 6
 		game.craft_panel.radio_mode = radio_panel
 		game.craft_open = crafting or radio_panel
 		game.local_pos = p.pos

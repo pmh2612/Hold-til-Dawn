@@ -65,10 +65,11 @@ func draw_fx(n, pos: Vector2, angle: float) -> void:
 var bag_open = false
 # [box, index] of the slot being dragged, or null
 var drag_from
+var hotbar_click_held: bool = false
 static var ARMOUR_SHORT = ["No armour", "Light", "Stone", "Titanium"]
 
 # The stats beside the HP hexagon: the armour worn, as its icon and name (armour takes no bag slot), then the
-# bandages and healing flasks in the bag with their counts, and the Healer's own flasks.
+# bandages and crafted healing flasks in the bag with their counts.
 func draw_stat_slots(c, vs: Vector2, me) -> void:
 	var cw = c
 	var x: float = 92
@@ -87,17 +88,19 @@ func draw_stat_slots(c, vs: Vector2, me) -> void:
 			c.draw_rect(Rect2(x + 1, y + 1, 34, 24), Color(0.08, 0.07, 0.1, 0.6))
 		main.text(cw, Vector2(x + 18, y + 23), Cs.s(n), 10, Color.WHITE if n > 0 else Color(1, 1, 1, 0.45), 2, 16)
 		x += 40
-	if me[1] == 1:
-		# the Healer's own flasks (not an item)
-		_draw_stat_slots_box(36, me[10] > 0, c, x, y)
-		main.hex(cw, Vector2(x + 18, y + 13), 9, Color("3DBE5A"))
-		main.text(cw, Vector2(x, y + 17), "+%d" % [me[10]], 10, Color.WHITE, 1, 36)
 
 # local function Box of the method above
 func _draw_stat_slots_box(w: float, lit: bool, c, x, y) -> void:
 	var r = Rect2(x, y, w, 26)
 	c.draw_rect(r, Color(0.08, 0.07, 0.1, 0.85))
 	c.draw_rect(r, Color(GOLD, 0.8) if lit else Color(1, 1, 1, 0.25), false, 1)
+
+static func bag_title(me) -> String:
+	var count_: int = me[7].size()
+	for tier in range(1, GameSim.BAG_ITEMS.size()):
+		if count_ == GameSim.INV_SLOTS + GameSim.BAG_BONUS[tier]:
+			return "%s (%d)" % [SimInventory.item_name(GameSim.BAG_ITEMS[tier]).to_upper(), count_]
+	return "YOUR BAG (%d)" % count_
 
 static func carried(me, id) -> int:
 	return 0 if me == null else SimInventory.count_in(me[7], id)
@@ -129,7 +132,7 @@ func keep_panels_in_reach(me) -> void:
 		drag_from = null
 	var station: Vector2 = GameSim.RADIO_POS if main.craft_panel.radio_mode else GameSim.WORKBENCH_POS
 	var reach: float = GameSim.RADIO_REACH if main.craft_panel.radio_mode else GameSim.BENCH_REACH
-	if main.craft_open and (int(me[5]) != 0 or not (in_base and Vector2(main.local_pos).distance_to(station) <= reach + PANEL_SLACK)):
+	if main.craft_open and (int(me[5]) != 0 or not main.craft_panel.field_mode and not (in_base and Vector2(main.local_pos).distance_to(station) <= reach + PANEL_SLACK)):
 		main.craft_open = false
 		drag_from = null
 	# the chest has no slack: past its reach its slots go (the server refuses them there too)
@@ -198,7 +201,40 @@ func draw_hotbar(c, vs, me) -> void:
 		c.draw_rect(Rect2(vs.x / 2 - 60, y0 - 24, 120, 5), INK)
 		c.draw_rect(Rect2(vs.x / 2 - 60, y0 - 24, 120 * clampf(me[27], 0, 1), 5), GOLD)
 
-# [box, index, rect] for every slot of the open bag panel: inventory (4 x 2) and, at the chest, storage (8 x 5).
+# Clickable hotbar slots share the exact rectangles used by draw_hotbar.
+func hotbar_slot_at(vs: Vector2, at: Vector2) -> int:
+	var w: float = GameSim.HOTBAR * SLOT + (GameSim.HOTBAR - 1) * SLOT_GAP
+	for i in range(GameSim.HOTBAR):
+		if Rect2((vs.x - w) / 2 + i * (SLOT + SLOT_GAP), vs.y - SLOT - 10, SLOT, SLOT).has_point(at):
+			return i
+	return -1
+
+func hotbar_mouse(ev) -> bool:
+	if ev.button_index != MOUSE_BUTTON_LEFT:
+		return false
+	if not ev.pressed and hotbar_click_held:
+		hotbar_click_held = false
+		return true
+	if not ev.pressed or ui_captures_mouse() or main.build_menu.build_open:
+		return false
+	return begin_hotbar_selection(Vector2(main.hud.size), main.hud.get_local_mouse_position())
+
+func begin_hotbar_selection(vs: Vector2, at: Vector2) -> bool:
+	if ui_captures_mouse() or main.minimap.map_big:
+		return false
+	var slot: int = hotbar_slot_at(vs, at)
+	if slot < 0:
+		return false
+	hotbar_click_held = true
+	main.act("select", slot)
+	return true
+
+func filter_primary_attack(pressed: bool) -> bool:
+	if not pressed:
+		hotbar_click_held = false
+	return pressed and not hotbar_click_held
+
+# Four inventory columns, growing from two to four rows; storage keeps its own size.
 func bag_slots(vs, me) -> Variant:
 	var out = []
 	var expedition: bool = main.exploration_chests.bag_exploration_chest >= 0 and main.exploration_chests.at_exploration_chest_local(me, main.exploration_chests.bag_exploration_chest)
@@ -210,7 +246,7 @@ func bag_slots(vs, me) -> Variant:
 	var gap: float = 28.0 if sto else 0.0
 	var x0: float = (vs.x - (inv_w + gap + sto_w)) / 2
 	var y0: float = vs.y / 2 - 110
-	for i in range(GameSim.INV_SLOTS):
+	for i in range(me[7].size()):
 		# the hotbar row sits apart at the top
 		var y: float = y0 + i / 4 * (SLOT + SLOT_GAP) + (8.0 if i >= 4 else 0.0)
 		out.append(["inv", i, Rect2(x0 + i % 4 * (SLOT + SLOT_GAP), y, SLOT, SLOT)])
@@ -235,10 +271,10 @@ func draw_bag(c, vs, me) -> void:
 	frame_ = frame_.grow_individual(extra, 0, extra, 0)
 	c.draw_rect(frame_, Color("10151C"))
 	c.draw_rect(frame_, GOLD, false, 1.5)
-	main.text(c, all.position + Vector2(0, -14), "YOUR BAG", 11, GOLD, 0, -1.0, true)
+	main.text(c, all.position + Vector2(0, -14), bag_title(me), 11, GOLD, 0, -1.0, true)
 	main.text(c, Vector2(frame_.position.x, all.end.y + 28), "Drag: transfer | Tab: close", 10, Color(1, 1, 1, 0.6), 1, frame_.size.x)
-	if slots.size() > GameSim.INV_SLOTS:
-		var first: Rect2 = Rect2(slots[GameSim.INV_SLOTS][2])
+	if slots.size() > me[7].size():
+		var first: Rect2 = Rect2(slots[me[7].size()][2])
 		main.text(c, first.position + Vector2(0, -14), "CHEST" if main.exploration_chests.bag_exploration_chest >= 0 else "SHARED STORAGE", 11, GOLD, 0, -1.0, true)
 	var sto = main.exploration_chests.exploration_chest_slots() if main.exploration_chests.bag_exploration_chest >= 0 else main.snap.get("sto", [])
 	var mouse: Vector2 = Vector2(main.hud.get_local_mouse_position())

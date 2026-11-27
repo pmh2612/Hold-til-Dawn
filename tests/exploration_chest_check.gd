@@ -31,8 +31,8 @@ func run() -> void:
 	var most_coastal: int = 0
 	check(w.lm_at.keys().filter(func(id): return id != 1).size() == 17, "all 17 expedition and farm landmarks remain built outside the outpost")
 	var resource_positions = Array(s.nodes.map(func(n): return Vector2(n.get("pos")))).duplicate()
-	var excluded_loot = ["bandage", "light_armour", "stone_armour", "titanium_armour", "healing_flask", "repair_kit"]
-	check(GameSim.CHEST_SUPPORT.size() == 4 and ["revive", "vine_trap", "poison_flask", "haste_tonic"].all(func(id): return GameSim.CHEST_SUPPORT.has(id)), "chest support pool contains only revival kits, traps, poison and haste")
+	var excluded_loot = ["revive", "bandage", "light_armour", "stone_armour", "titanium_armour", "healing_flask", "repair_kit"]
+	check(GameSim.CHEST_SUPPORT.size() == 3 and ["vine_trap", "poison_flask", "haste_tonic"].all(func(id): return GameSim.CHEST_SUPPORT.has(id)), "chest support pool contains only traps, poison and haste")
 	for seed_ in range(64):
 		s.rng.seed = seed_
 		var started: int = Time.get_ticks_msec()
@@ -118,7 +118,7 @@ func run() -> void:
 	check(smallest_gap >= 20 * GameSim.T, "64 seeds: every chest pair stays at least twenty tiles apart")
 	check(layouts.size() == 64, "64 seeds: all nine island regions have two or three chests and at least one scattered chest")
 	check(layouts.size() == 64 and most_coastal <= 3, "64 seeds: no more than three chests within ten tiles of the sea, including named sites and docks")
-	check(layouts.size() == 64, "64 seeds: no armour, bandage, healing flask or field repair kit in any chest")
+	check(layouts.size() == 64, "64 seeds: no Revival kit, armour, bandage, healing flask or field repair kit in any chest")
 	# Same seed and world must produce the same plan, independent of previous chest placements.
 	s.rng.seed = 63
 	s.place_supplies()

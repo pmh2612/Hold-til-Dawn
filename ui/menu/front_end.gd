@@ -265,9 +265,9 @@ func build_ui() -> void:
 	main.banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	main.banner.add_theme_font_override("font", main.font_title)
 	main.banner.add_theme_font_size_override("font_size", 24)
-	main.banner.add_theme_color_override("font_color", Color("F2B544"))
+	main.banner.add_theme_color_override("font_color", Color("FF4C42"))
 	main.banner.add_theme_constant_override("outline_size", 5)
-	main.banner.add_theme_color_override("font_outline_color", INK)
+	main.banner.add_theme_color_override("font_outline_color", Color.BLACK)
 	root.add_child(main.banner)
 
 func theme() -> Variant:

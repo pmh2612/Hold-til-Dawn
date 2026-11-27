@@ -5,6 +5,12 @@ extends Node
 func _ready() -> void:
 	# try (GDScript has no exceptions; the body runs unguarded)
 	var w = WorldGeometry.new()
+	if not check_landmark_labels(w):
+		get_tree().quit(1)
+		return
+	if "--labels-only" in OS.get_cmdline_user_args():
+		get_tree().quit()
+		return
 	check_expedition_sites(w)
 	check_compound_perimeters(w)
 	check_lookouts(w)
@@ -170,6 +176,38 @@ func _ready() -> void:
 	print("LANDMARK GROUND ALL OK: %s queries match existing terrain; average %s nearby path segments per location" % [compared, segments / w.lm_at.size()])
 	get_tree().quit()
 	# catch (Exception Error) dropped
+
+static func check_landmark_labels(w: WorldGeometry) -> bool:
+	var expected = {1: Vector2.ZERO, 8: w.swamp_centre, 10: w.lm_at[10], 14: w.lm_at[14], 15: w.ponds[0].centre, 16: w.cave_centre, 18: w.garden_centre}
+	for id in [2, 3, 4]:
+		expected[id] = WorldHomeFarms.home_farm_centre(id - 2)
+	for id in [5, 7, 11]:
+		expected[id] = w.expedition_sites[id].centre
+	for id in [6, 9, 13]:
+		expected[id] = w.compounds[id].get_center()
+	for id in [12, 17]:
+		expected[id] = w.lookouts[id].centre
+	var reach: float = 8 * IslandMap.SCALE * 32
+	for location in IslandMap.landmarks:
+		var centre: Vector2 = w.landmark_centre(location.id)
+		if not centre.is_equal_approx(expected[location.id]):
+			Cs.fail("Landmark marker misses built scene centre: %s" % location.name)
+			return false
+		var here = w.near_landmark(centre, reach)
+		if (location.id == 1 and here != null) or (location.id != 1 and (here == null or here.id != location.id)):
+			Cs.fail("Wrong arrival name at the centre of %s" % location.name)
+			return false
+		print("LABEL CENTRE %02d %s: original offset %.2f tiles; scene anchor offset %.2f tiles" % [location.id, location.name, location.pos.distance_to(centre) / 32, w.lm_at[location.id].distance_to(centre) / 32])
+	for p in [w.cave_entrance, w.cave_centre - Vector2(8 * 32, 0)]:
+		var here = w.near_landmark(p, reach)
+		if here == null or here.id != 16:
+			Cs.fail("Cave entrance or deep interior shows the wrong arrival name")
+			return false
+	if w.near_landmark(Vector2(10000, 10000), reach) != null:
+		Cs.fail("A remote point incorrectly shows a landmark name")
+		return false
+	print("LANDMARK LABELS ALL OK: all 18 scene centres, arrival names, cave coverage and no distant label")
+	return true
 
 static func check_expedition_sites(w) -> void:
 	for id in [5, 7, 11]:

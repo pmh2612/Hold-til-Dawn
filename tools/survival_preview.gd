@@ -26,7 +26,7 @@ func _ready() -> void:
 			game.sim.tick_tower_construction(p, 3)
 		game.local_pos = p.pos
 		game.craft_open = stage == 3
-		game.craft_panel.craft_tier = 1
+		game.craft_panel.select_craft_category(0)
 		game.craft_panel.craft_sel = 1
 		game.on_snap(game.sim.snapshot())
 		game.local_tp = p.tp

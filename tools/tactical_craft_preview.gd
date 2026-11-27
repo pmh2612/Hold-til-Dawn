@@ -5,7 +5,7 @@ var stage: int = 0
 var warm_frames: int = 0
 var capturing: bool = false
 var finished: bool = false
-var selected = [15, 2, 6]
+var selected = [16, 17, 12, 9]
 
 func _ready() -> void:
 	# try (GDScript has no exceptions; the body runs unguarded)
@@ -35,28 +35,27 @@ func _ready() -> void:
 	sim.unlock = 2
 	var p = sim.players[1]
 	p.pos = GameSim.WORKBENCH_POS + Vector2(0, 24)
+	SimInventory.equip_bag(p, "backpack")
 	for id in ["wood", "stone", "herb", "titanium"]:
 		sim.set_count(p, id, 30)
 	my_id = 1
 	local_pos = p.pos
 	snap = sim.snapshot()
 	craft_open = true
-	for category in range(2):
+	for category in range(3):
 		craft_panel.select_craft_category(category)
-		for t in range(3):
-			craft_panel.select_craft_tier(t)
-			var cards = craft_panel.craft_choices()
-			for i in cards:
-				var a: Rect2 = craft_panel.craft_card(Vector2(960, 540), i)
-				if a.end.x > craft_detail_right_edge():
-					Cs.fail("Card exceeds recipe column")
+		var cards = craft_panel.craft_choices()
+		for i in cards:
+			var a: Rect2 = craft_panel.craft_card(Vector2(960, 540), i)
+			if a.end.x > craft_detail_right_edge() or a.end.y >= craft_panel.craft_panel_rect(Vector2(960, 540)).position.y + 330:
+				Cs.fail("Card exceeds recipe column or overlaps backpack")
+				return
+			for j in cards:
+				if i != j and a.intersects(craft_panel.craft_card(Vector2(960, 540), j)):
+					Cs.fail("Overlapping recipe cards")
 					return
-				for j in cards:
-					if i != j and a.intersects(craft_panel.craft_card(Vector2(960, 540), j)):
-						Cs.fail("Overlapping recipe cards")
-						return
 	DirAccess.make_dir_recursive_absolute("res://.tmp/tactical-craft")
-	print("TACTICAL CRAFT LAYOUT OK: 16 recipes in 2 categories and 3 tiers")
+	print("TACTICAL CRAFT LAYOUT OK: 18 recipes in Weapons, Equipment and Armor")
 	if DisplayServer.get_name() == "headless":
 		finished = true
 		get_tree().quit()
@@ -72,12 +71,26 @@ func _process(delta: float) -> void:
 	if finished or capturing:
 		return
 	var review_hud = hud
-	review_hud.visible = stage < 3
-	if stage < 3:
+	review_hud.visible = stage < 5
+	if stage < 4:
 		craft_panel.select_craft_category(CraftPanelUi.category_of(selected[stage]))
-		craft_panel.select_craft_tier(stage)
+		snap.unlock = 0 if stage == 2 else 2
 		craft_panel.craft_sel = selected[stage]
+		craft_panel.field_mode = stage == 3
+		craft_open = true
+		if stage == 3:
+			local_pos = Vector2(0, 640)
+			snap.ph = "night"
+			snap.ps[1][2] = local_pos
 		review_hud.queue_redraw()
+	elif stage == 4:
+		craft_open = false
+		inventory.bag_open = true
+		snap.ps[1][16] = "Bag full"
+		snap.ps[1][22] = "idle"
+		review_hud.queue_redraw()
+	else:
+		inventory.bag_open = false
 	queue_redraw()
 
 func _draw() -> void:
@@ -86,7 +99,7 @@ func _draw() -> void:
 	# try (GDScript has no exceptions; the body runs unguarded)
 	draw_rect(Rect2(0, 0, 960, 540), Color("293631"))
 	clock = 1.5
-	if stage < 3:
+	if stage < 5:
 		# DrawHud's real Control / CanvasLayer draws the panel, as it does during play.
 		pass
 	else:
@@ -117,7 +130,7 @@ func _draw() -> void:
 	stage += 1
 	warm_frames = 0
 	capturing = false
-	if stage == 4:
+	if stage == 6:
 		print("TACTICAL CRAFT RENDER OK")
 		finished = true
 		get_tree().quit()

@@ -20,6 +20,7 @@ var paused: bool = false
 var t: float = 0.0
 var up: float = 0.0
 var shot = ""
+var sheet_review: bool = false
 
 func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -37,6 +38,7 @@ func _ready() -> void:
 			var c = value
 			var a = c["anchor"]
 			var s = Cs.init(Sheet.new(), {"name": str(key), "tex": load("res://art/chars/" + str(key) + ".png"), "size": int(c["size"]), "anchor": Vector2(float(a[0]), float(a[1]))})
+			s.resolution = float(c.get("resolution", 1.0))
 			# the looping ones (idle, run) are listed at the top of the json, the one-shots under each character
 			for n in frames:
 				var f = frames[n]
@@ -51,8 +53,35 @@ func _ready() -> void:
 				var one = c["anims"]
 				Cs.sort_cmp(names, func(x, y): return Cs.compare(int(one[x][0]), int(one[y][0])))
 				for n in names:
+					# Old four-frame tool poses are still used for repairs/item use.
+					# The viewer lists the actual six-frame weapon attacks instead.
+					if c.has("combat") and n.begins_with("attack_"):
+						continue
 					var r = one[n]
-					s.anims.append(Cs.init(Anim.new(), {"name": n, "first": int(r[0]), "count": int(r[1]), "fps": float(r[2]), "loop": n.begins_with("gather_")}))
+					s.anims.append(Cs.init(Anim.new(), {"name": n, "first": int(r[0]), "count": int(r[1]), "fps": float(r[2]), "loop": n.begins_with("gather_") or n == "charge_run"}))
+			for n in c.get("combat", {}):
+				var clip: Dictionary = c.combat[n]
+				var attack := Anim.new()
+				attack.name = n
+				attack.count = int(info.combat.frames)
+				attack.fps = float(clip.fps) * GameSim.WEAPON_ATTACK_SPEED
+				attack.regions = clip.rows
+				for direction in clip.rows:
+					for region in direction:
+						attack.bounds = attack.bounds.merge(Rect2(-Vector2(region[4], region[5]), Vector2(region[2], region[3])))
+				s.anims.append(attack)
+			for n in c.get("held", {}):
+				var clip: Dictionary = c.held[n]
+				var held := Anim.new()
+				held.name = n
+				held.count = int(clip.count)
+				held.fps = float(clip.fps)
+				held.loop = true
+				held.regions = clip.rows
+				for direction in clip.rows:
+					for region in direction:
+						held.bounds = held.bounds.merge(Rect2(-Vector2(region[4], region[5]), Vector2(region[2], region[3])))
+				s.anims.append(held)
 			sheets.append(s)
 	# start on the first attack of the first character, unless told otherwise
 	which = mini(2, sheets[0].anims.size() - 1)
@@ -63,6 +92,14 @@ func _ready() -> void:
 			which = maxi(0, Cs.find_index(sheets[who].anims, func(a): return a.name == arg.substr(7)))
 		elif arg.begins_with("--shot="):
 			shot = arg.substr(7)
+		elif arg == "--sheet":
+			sheet_review = true
+		elif arg.begins_with("--dir="):
+			strip_dir = clampi(int(arg.substr(6)), 0, 7)
+	if not Array(OS.get_cmdline_user_args()).any(func(arg): return arg.begins_with("--anim=")):
+		var attack_index: int = Cs.find_index(sheets[who].anims, func(a): return a.name == "combat_stone_spear")
+		if attack_index >= 0:
+			which = attack_index
 
 var current:
 	get:
@@ -83,7 +120,10 @@ func _process(delta: float) -> void:
 	queue_redraw()
 	up += delta
 	if shot != "" and up > 0.5:
-		get_viewport().get_texture().get_image().save_png(shot)
+		var image := get_viewport().get_texture().get_image()
+		image.convert(Image.FORMAT_RGBA8)
+		image.linear_to_srgb()
+		image.save_png(shot)
 		get_tree().quit()
 
 func _unhandled_input(e) -> void:
@@ -130,6 +170,8 @@ func pick(step: int) -> void:
 	t = 0
 
 func _draw() -> void:
+	if sheet_review and draw_combat_sheet():
+		return
 	var view = get_viewport_rect().size
 	var font = ThemeDB.fallback_font
 	var s = sheets[who]
@@ -139,15 +181,16 @@ func _draw() -> void:
 	var gap: float = 10
 	var head: float = 40
 	var foot: float = 26
+	var logical_size: float = maxf(a.bounds.size.x, a.bounds.size.y) if not a.regions.is_empty() else s.size / s.resolution
 	# the bottom strip is a third of the height, the 8 directions get the rest
 	var strip_h: float = (view.y - head - foot) * 0.32
 	var grid_h: float = view.y - head - foot - strip_h - gap
-	var big: float = maxf(1, floorf(minf((view.x - 2 * pad - 3 * gap) / (4 * s.size), (grid_h - gap - 32) / (2 * s.size))))
-	var small: float = maxf(1, floorf(minf((view.x - 2 * pad) / (a.count * (s.size + 4)), (strip_h - 18) / s.size)))
+	var big: float = maxf(.5, minf((view.x - 2 * pad - 3 * gap) / (4 * logical_size), (grid_h - gap - 32) / (2 * logical_size)))
+	var small: float = maxf(.5, minf((view.x - 2 * pad - 4 * (a.count - 1)) / (a.count * logical_size), (strip_h - 18) / logical_size))
 	var title = "%s  (%s/%s)   %s  [%s..%s]  %s fps  x%s%s" % [s.name, who + 1, sheets.size(), a.name, a.first, a.first + a.count - 1, Cs.s(a.fps), Cs.s(SPEEDS[speed]), "  PAUSED" if paused else ""]
 	draw_string(font, Vector2(pad, 26), title, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
 	var col: int = frame(a, t)
-	var cell_w: float = s.size * big
+	var cell_w: float = logical_size * big
 	var x0: float = floorf((view.x - (4 * cell_w + 3 * gap)) / 2)
 	for d in range(8):
 		var at = Vector2(x0 + d % 4 * (cell_w + gap), head + d / 4 * (cell_w + 16 + gap))
@@ -156,16 +199,55 @@ func _draw() -> void:
 	# every frame of the animation in one direction, the one playing outlined
 	var sy: float = view.y - foot - strip_h
 	draw_string(font, Vector2(pad, sy + 12), "frames, %s (Z / X)" % [DIRS[strip_dir]], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.75, 0.78, 0.85))
-	var sw: float = s.size * small
+	var sw: float = logical_size * small
 	var sx: float = floorf((view.x - (a.count * sw + (a.count - 1) * 4)) / 2)
 	for f in range(a.count):
 		var at = Vector2(sx + f * (sw + 4), sy + 18)
 		cell(s, a.first + f, strip_dir, at, small, a.first + f == col)
 	draw_string(font, Vector2(pad, view.y - 8), "Left/Right character   Up/Down animation   Z/X strip direction   Space pause   , . step   - + speed   Esc quit", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.55, 0.58, 0.65))
 
+# Exportable contact sheet of the actual PNG regions, without game effects or overlays.
+# -- --char=engineer --sheet --dir=0 --shot=res://.tmp/engineer-attacks.png
+func draw_combat_sheet() -> bool:
+	var s = sheets[who]
+	var attacks: Array = s.anims.filter(func(a): return a.name.begins_with("combat_"))
+	if attacks.is_empty():
+		return false
+	var view: Vector2 = get_viewport_rect().size
+	var font: Font = ThemeDB.fallback_font
+	draw_rect(Rect2(Vector2.ZERO, view), Color("20242B"))
+	draw_string(font, Vector2(16, 28), "%s / %s" % [s.name.to_upper(), DIRS[strip_dir]], HORIZONTAL_ALIGNMENT_LEFT, -1, 20, Color.WHITE)
+	var label_width: float = 158
+	var cw: float = (view.x - label_width - 12) / 6
+	var rh: float = (view.y - 62) / attacks.size()
+	var bounds := Rect2()
+	for a in attacks:
+		for region in a.regions[strip_dir]:
+			bounds = bounds.merge(Rect2(-Vector2(region[4], region[5]), Vector2(region[2], region[3])))
+	var zoom: float = minf((cw - 10) / bounds.size.x, (rh - 8) / bounds.size.y)
+	for pose in range(6):
+		draw_string(font, Vector2(label_width + pose * cw + 8, 52), ["Ready", "Draw back", "Extend", "Strike", "Return", "Reset"][pose], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color("B4BAC3"))
+	for index in range(attacks.size()):
+		var a = attacks[index]
+		var y: float = 60 + index * rh
+		draw_string(font, Vector2(12, y + rh / 2), a.name.trim_prefix("combat_").replace("_", " "), HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color("EAC16C"))
+		for pose in range(6):
+			var at := Vector2(label_width + pose * cw, y)
+			for cy in range(ceili(rh / 8)):
+				for cx in range(ceili(cw / 8)):
+					draw_rect(Rect2(at + Vector2(cx * 8, cy * 8), Vector2(minf(8, cw - cx * 8), minf(8, rh - cy * 8))), Color("2C313A") if (cx + cy) % 2 else Color("252A32"))
+			var foot: Vector2 = at + (Vector2(cw, rh) - bounds.size * zoom) / 2 - bounds.position * zoom
+			var region: Array = a.regions[strip_dir][pose]
+			var source := Rect2(region[0], region[1], region[2], region[3])
+			draw_texture_rect_region(s.tex, Rect2(foot - Vector2(region[4], region[5]) * zoom, source.size * zoom), source)
+	return true
+
 # one sheet cell scaled up, on a checkerboard, with the anchor marked
 func cell(s, col: int, row: int, at: Vector2, zoom: float, lit: bool) -> void:
-	var w: float = s.size * zoom
+	var a = current
+	var packed: bool = not a.regions.is_empty()
+	var logical_size: float = maxf(a.bounds.size.x, a.bounds.size.y) if packed else s.size / s.resolution
+	var w: float = logical_size * zoom
 	var q: float = maxf(4, 4 * zoom)
 	var y: float = 0
 	while y < w:
@@ -175,8 +257,15 @@ func cell(s, col: int, row: int, at: Vector2, zoom: float, lit: bool) -> void:
 			draw_rect(Rect2(at + Vector2(x, y), Vector2(minf(q, w - x), minf(q, w - y))), Color(0.24, 0.26, 0.3) if odd else Color(0.2, 0.22, 0.26))
 			x += q
 		y += q
-	draw_texture_rect_region(s.tex, Rect2(at, Vector2(w, w)), Rect2(col * s.size, row * s.size, s.size, s.size))
-	var p = at + s.anchor * zoom
+	var p: Vector2 = at + s.anchor / s.resolution * zoom
+	if packed:
+		# All frames share one foot anchor in the preview, just as they do in game.
+		p = at - a.bounds.position * zoom + (Vector2.ONE * logical_size - a.bounds.size) * zoom / 2
+		var region: Array = a.regions[row][col]
+		var source := Rect2(region[0], region[1], region[2], region[3])
+		draw_texture_rect_region(s.tex, Rect2(p - Vector2(region[4], region[5]) * zoom, source.size * zoom), source)
+	else:
+		draw_texture_rect_region(s.tex, Rect2(at, Vector2(w, w)), Rect2(col * s.size, row * s.size, s.size, s.size))
 	var red = Color(1, 0.3, 0.3, 0.8)
 	draw_line(p - Vector2(zoom * 2, 0), p + Vector2(zoom * 2, 0), red, 1)
 	draw_line(p - Vector2(0, zoom * 2), p + Vector2(0, zoom * 2), red, 1)
@@ -188,10 +277,13 @@ class Anim:
 	var count: int = 0
 	var fps: float = 0.0
 	var loop: bool = false
+	var regions: Array = []
+	var bounds := Rect2()
 
 class Sheet:
 	var name
 	var tex
 	var size: int = 0
+	var resolution: float = 1.0
 	var anchor: Vector2 = Vector2.ZERO
 	var anims = []

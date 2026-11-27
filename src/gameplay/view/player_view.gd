@@ -4,6 +4,7 @@ extends RefCounted
 # Part of Main (main.gd); in the C# version this was in Main.cs.
 # Owner: Mai Thien Ngon.
 var slash_t = {}
+var combat_info: Dictionary = {}
 
 # constants shared with Main
 const CHAR_H = Main.CHAR_H
@@ -16,6 +17,23 @@ var main: Main
 
 func _init(host: Main) -> void:
 	main = host
+
+func load_combat_art() -> void:
+	combat_info = main.cinfo.get("combat", {})
+
+func combat_animation(skin: String, name_: String) -> Variant:
+	return main.cinfo.get("chars", {}).get(skin, {}).get("combat", {}).get(name_)
+
+# Read the selected stack itself: p[8] only describes weapons and becomes fists for resources/tools.
+static func held_item(p: Array) -> String:
+	if p.size() <= 25 or int(p[5]) != 0:
+		return ""
+	var slots: Array = p[7]
+	var selected: int = int(p[25])
+	if selected < 0 or selected >= slots.size():
+		return ""
+	var stack = slots[selected]
+	return Cs.s(stack[0]) if stack != null and int(stack[1]) > 0 else ""
 
 func draw_player(id, p, foot) -> void:
 	var r = T * 0.42
@@ -51,20 +69,26 @@ func draw_player(id, p, foot) -> void:
 		aim = (p[23] - p[2]).angle()
 	# the attack frames of the weapon in hand (src/gameplay/view/anim.gd)
 	var attack = main.anim.player_attack(id, p, skin)
+	if attack != null and attack.size() > 2:
+		aim = float(attack[2])
+		fighting = true
 	var gather = main.harvest_view.gather_animation(Vector2(p[23])) if activity == "gather" and attack == null else null
 	# Reuse each role's own sprite frames for working, rather than leaving the actor idle.
 	if attack == null and activity in ["repair", "loot"]:
 		gather = "attack_hammer" if activity == "repair" else "gather_herb"
 	var _v1 = (attack[0] if attack != null else null)
 	var _v2 = (attack[1] if attack != null else null)
-	self.char_(id, skin, foot, aim, 1.0, Color.WHITE, fighting or activity != "idle", activity, _v1 if _v1 != null else gather, _v2 if _v2 != null else 0.0, gather != null)
+	main.tactical_items.draw_haste(id, p, Vector2(foot))
+	if attack != null and Cs.s(attack[0]).begins_with("combat_"):
+		var weapon: String = Cs.s(attack[0]).trim_prefix("combat_")
+		main.tactical_items.draw_attack_range(Vector2(foot), aim, weapon, float(attack[1]) / main.anim.anim_length(skin, attack[0]))
+	self.char_(id, skin, foot, aim, 1.0, Color.WHITE, fighting or activity != "idle", activity, _v1 if _v1 != null else gather, _v2 if _v2 != null else 0.0, gather != null, held_item(p))
 	self.draw_activity(foot, aim, activity)
-	main.tactical_items.draw_tactical_weapon(id, p, Vector2(foot), aim)
 
 # compass octant (0 = right, counting clockwise on screen) to the sheet row
 static var OCT_ROW = [0, 4, 1, 5, 2, 6, 3, 7]
 
-func char_(key_, skin, foot, aim, s, mod_, lock = null, activity = null, play = null, play_t: float = 0.0, loop: bool = false) -> void:
+func char_(key_, skin, foot, aim, s, mod_, lock = null, activity = null, play = null, play_t: float = 0.0, loop: bool = false, carried = null) -> void:
 	if lock == null: lock = false
 	if activity == null: activity = "idle"
 	# A pixel-art character: the walk cycle while it moves, idle breathing otherwise.
@@ -91,8 +115,18 @@ func char_(key_, skin, foot, aim, s, mod_, lock = null, activity = null, play = 
 	# The facing only changes once the angle is well past the edge between two directions, so walking
 	# diagonally (two keys) or sliding along a wall never flickers between neighbouring rows.
 	var c0 = main.cinfo.chars[skin]
+	var combat = null if play == null else combat_animation(Cs.s(skin), Cs.s(play))
 	var one = null if play == null else c0.get("anims", {}).get(play, null)
-	var rows: int = int(tex.get_height() / c0.size)
+	if combat != null:
+		one = [0, combat_info.frames, combat.fps]
+	elif play == null and carried != null:
+		var hold_name: String = "hold_%s_%s" % ["empty" if carried == "" else carried, anim]
+		combat = c0.get("held", {}).get(hold_name)
+		if combat != null:
+			play = hold_name
+			loop = true
+			one = [0, combat.count, combat.fps]
+	var rows: int = 8 if c0.has("combat") else int(tex.get_height() / c0.size)
 	var dir: int = 0
 	if rows >= 8:
 		var oct: int = wrapi(roundi(ang / (PI / 4.0)), 0, 8)
@@ -124,10 +158,21 @@ func char_(key_, skin, foot, aim, s, mod_, lock = null, activity = null, play = 
 		var count: int = int(one[1])
 		var frame_: int = int((phase_time if loop else play_t) * float(one[2]))
 		f = int(one[0]) + (frame_ % count if loop else mini(count - 1, frame_))
+	if combat != null:
+		# One atlas draw contains the body, arms, weapon and depth ordering for this pose.
+		var region: Array = combat.rows[dir][f]
+		var source := Rect2(region[0], region[1], region[2], region[3])
+		var anchor_ := Vector2(region[4], region[5])
+		main.draw_texture_rect_region(tex, Rect2(Vector2(foot) - anchor_ * s, source.size * s), source, mod_)
+		return
 	var c = main.cinfo.chars[skin]
-	var size = Vector2(c.size, c.size)
-	var anchor = Vector2(c.anchor[0], c.anchor[1])
-	main.draw_texture_rect_region(tex, Rect2(foot - anchor * s, size * s), Rect2(Vector2(f, dir) * size, size), mod_)
+	# Source texels and world units are separate: boss atlases compensate for their 3x
+	# drawing scale to match player pixels. The footprint and foot anchor stay fixed.
+	var source_size = Vector2(c.size, c.size)
+	var resolution: float = float(c.get("resolution", 1.0))
+	var size = source_size / resolution
+	var anchor = Vector2(c.anchor[0], c.anchor[1]) / resolution
+	main.draw_texture_rect_region(tex, Rect2(foot - anchor * s, size * s), Rect2(Vector2(f, dir) * source_size, source_size), mod_)
 
 # How a node looks as it is gathered (broken stages, chips): src/world/view/node_break.gd
 func player_ui(id, p, foot, font) -> void:

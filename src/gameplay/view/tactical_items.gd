@@ -7,8 +7,7 @@ extends RefCounted
 #   vine trap - sprouts out of the ground, then waits with its vines curling
 #   blast    - the explosive arrow's burst: a flash, a ring and flying sparks
 #   haste    - streaks behind a hasted runner and sparks round their feet
-#   long spear / stun maul - drawn moving over the spear / hammer frames: a thrust out and back, an overhead
-#   blow that lands with a shock ring and stars
+# Compact weapons are baked into the character PNGs; cyan attack trails show melee reach.
 # when this client first saw each tactical area (by kind and spot), for its opening animation
 var area_seen = {}
 # seconds a thrown flask flies before it splashes
@@ -145,48 +144,72 @@ func draw_haste(id, p, foot: Vector2) -> void:
 		var s: Vector2 = foot + Vector2(-9 + i * 9, -k * 22)
 		main.draw_rect(Rect2(s.round(), Vector2(2, 2)), Color(gold, 1 - k))
 
-func draw_tactical_weapon(id, p, foot: Vector2, aim: float) -> void:
-	draw_haste(id, p, foot)
-	var w = Cs.s(p[8])
-	if not p[11] or not (w == "long_spear" or w == "stun_maul"):
+# The original prototype paired NEON_CYAN with a white inner slash (cf44b5f Main.cs).
+# Keep that palette with tapered ribbons, moving outward to actual gameplay reach.
+# No sector/rectangle outline: only the brief attack trail is drawn under the actor.
+# Bows show their range through the actual moving arrow projectiles.
+func draw_attack_range(foot: Vector2, aim: float, weapon: String, progress: float) -> void:
+	if weapon in ["bow", "starter_bow", "explosive_arrow"] or progress < 0.0 or progress >= 1.0:
 		return
-	var start: float = main.anim.swing_start(Cs.s(id), true)
-	var k: float = clampf((float(main.clock) - start) / 0.25, 0.0, 1.0)
-	var dir: Vector2 = Vector2.from_angle(aim)
-	var side: Vector2 = dir.orthogonal()
-	var hand: Vector2 = foot - Vector2(0, 18)
-	var ink = Color(0.08, 0.07, 0.1)
-	if w == "long_spear":
-		# drawn back, driven out to full reach, pulled back
-		var out: float = -8.0 * (k / 0.25) if k < 0.25 else lerpf(-8.0, 22.0, (k - 0.25) / 0.3) if k < 0.55 else lerpf(22.0, 4.0, (k - 0.55) / 0.45)
-		var butt: Vector2 = hand - dir * 12 + dir * out
-		var tip: Vector2 = hand + dir * 46 + dir * out
-		main.draw_line(butt, tip, ink, 5)
-		main.draw_line(butt, tip, Color("C39058"), 3)
-		main.draw_colored_polygon([tip + dir * 13, tip + side * 5, tip - side * 5], Color("DBE9D7"))
-		main.draw_polyline([tip + dir * 13, tip + side * 5, tip - side * 5, tip + dir * 13], ink, 1.5)
-		if k > 0.35 and k < 0.75:
-			# the thrust streak
-			var a_: float = 1.0 - absf(k - 0.55) / 0.2
-			main.draw_line(tip + dir * 15 - side * 3, tip + dir * 34 - side * 3, Color(1, 1, 1, 0.6 * a_), 2.0)
-			main.draw_line(tip + dir * 15 + side * 3, tip + dir * 30 + side * 3, Color(1, 1, 1, 0.6 * a_), 2.0)
+	var travel: float = clampf(progress / 0.6, 0.0, 1.0)
+	var fade: float = minf(1.0, progress / 0.12) * minf(1.0, (1.0 - progress) / 0.3)
+	var reach: float = weapon_reach(weapon)
+	var radius: float = reach * (0.28 + 0.72 * travel)
+	var blue := Color("267AD8")
+	var cyan: Color = Main.NEON_CYAN
+	var ice := Color("DCF9FF")
+	if weapon == "long_spear":
+		var dir := Vector2.from_angle(aim)
+		draw_thrust_trail(foot, dir, radius, 10.0, Color(blue, 0.24 * fade))
+		draw_thrust_trail(foot, dir, radius, 5.0, Color(cyan, 0.66 * fade))
+		draw_thrust_trail(foot, dir, radius, 1.5, Color(ice, 0.90 * fade))
 	else:
-		# raised high behind, brought down hard in front, a shock where it lands
-		var swing: float = lerpf(0.0, -0.4, k / 0.3) if k < 0.3 else lerpf(-0.4, 1.0, ease(clampf((k - 0.3) / 0.3, 0.0, 1.0), 2.4))
-		var lift: float = (1.0 - swing) * 22.0
-		var head: Vector2 = hand + dir * (12 + 18 * swing) - Vector2(0, lift)
-		main.draw_line(hand, head, ink, 6)
-		main.draw_line(hand, head, Color("B48550"), 4)
-		var hd: Vector2 = (head - hand).normalized()
-		var hs: Vector2 = hd.orthogonal()
-		var block = [head + hd * 6 + hs * 12, head + hd * 6 - hs * 12, head - hd * 6 - hs * 12, head - hd * 6 + hs * 12]
-		main.draw_colored_polygon(block, Color("A0CEE0"))
-		main.draw_polyline([block[0], block[1], block[2], block[3], block[0]], ink, 1.5)
-		if k >= 0.6:
-			var i: float = (k - 0.6) / 0.4
-			var ground_: Vector2 = foot + dir * 30
-			main.draw_set_transform(ground_, 0, Vector2(1.0, 0.45))
-			main.draw_arc(Vector2.ZERO, 8 + 22 * i, 0, TAU, 24, Color("DDD681", 1 - i), 2.5)
-			main.draw_set_transform(Vector2.ZERO)
-			for s in range(3):
-				main.draw_circle(ground_ - Vector2(0, 12 + 6 * i) + Vector2.from_angle(s * TAU / 3 + i * 4) * 9, 2.0, Color("FFF3B4", 1 - i))
+		# All ribbons lie inside the damage endpoint, including the soft blue rim.
+		draw_slash_ribbon(foot, aim, radius, 9.0, Color(blue, 0.22 * fade))
+		draw_slash_ribbon(foot, aim, radius, 5.0, Color(cyan, 0.70 * fade))
+		draw_slash_ribbon(foot, aim, radius - 1.0, 1.5, Color(ice, 0.90 * fade))
+		# A faint inner echo adds motion without a second hard range boundary.
+		draw_slash_ribbon(foot, aim, maxf(3.0, radius - 9.0), 1.0, Color(cyan, 0.15 * fade))
+	if progress > 0.2:
+		# Three tiny fading motes, deterministic and bounded: no particle emitters.
+		for i in range(3):
+			var offset: float = (i - 1) * 0.46 if weapon != "long_spear" else 0.0
+			var direction := Vector2.from_angle(aim + offset)
+			var at: Vector2 = foot + direction * maxf(2.0, radius - 3.0 - i * 3.0)
+			main.draw_rect(Rect2(at.round() - Vector2.ONE, Vector2(2, 2)), Color(ice, 0.55 * fade))
+
+# One small polygon per layer; opacity and thickness taper smoothly at both ends.
+func draw_slash_ribbon(foot: Vector2, aim: float, radius: float, width: float, tint_: Color) -> void:
+	var points := PackedVector2Array()
+	var colours := PackedColorArray()
+	for edge in range(2):
+		for index in range(17):
+			var t: float = (index if edge == 0 else 16 - index) / 16.0
+			var taper: float = pow(maxf(0.01, sin(t * PI)), 0.7)
+			var r: float = maxf(1.0, radius - (width * taper if edge == 1 else 0.0))
+			points.append(foot + Vector2.from_angle(aim - PI / 4 + t * PI / 2) * r)
+			colours.append(Color(tint_, tint_.a * taper * (0.35 if edge == 1 else 1.0)))
+	main.draw_polygon(points, colours)
+
+func draw_thrust_trail(foot: Vector2, dir: Vector2, radius: float, width: float, tint_: Color) -> void:
+	var side := dir.orthogonal()
+	var tail: float = maxf(2.0, radius - 32.0)
+	var middle: float = lerpf(tail, radius, 0.65)
+	var points := PackedVector2Array([foot + dir * tail, foot + dir * middle - side * width, foot + dir * radius, foot + dir * middle + side * width])
+	main.draw_polygon(points, PackedColorArray([Color(tint_, 0.0), tint_, Color(tint_, tint_.a * 0.9), tint_]))
+
+static func weapon_reach(weapon: String) -> float:
+	return float(GameSim.WEAPON_STATS["bow" if weapon == "explosive_arrow" else weapon][2]) * T
+
+static func attack_outline(weapon: String, foot: Vector2, aim: float) -> PackedVector2Array:
+	var reach: float = weapon_reach(weapon)
+	var dir := Vector2.from_angle(aim)
+	if weapon in ["bow", "starter_bow", "explosive_arrow"]:
+		return PackedVector2Array([foot, foot + dir * reach])
+	if weapon == "long_spear":
+		var side := dir.orthogonal() * 10
+		return PackedVector2Array([foot - side, foot + dir * reach - side, foot + dir * reach + side, foot + side])
+	var outline := PackedVector2Array()
+	for i in range(17):
+		outline.append(foot + Vector2.from_angle(aim - PI / 4 + i * PI / 32) * reach)
+	return outline

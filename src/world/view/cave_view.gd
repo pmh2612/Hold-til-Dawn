@@ -82,5 +82,5 @@ func draw_cave_walls(w, view: Rect2) -> void:
 		main.draw_line(face[4], face[5], Color("3A4239"), 2)
 		i += 1
 	for side in range(-1, 2, 2):
-		var p: Vector2 = w.cave_entrance + Vector2(0, side * 2.4 * 32)
+		var p: Vector2 = w.cave_entrance + Vector2(0, side * WorldCave.MOUTH_HALF_TILES * 32)
 		main.draw_line(p + Vector2(-10, -49), p + Vector2(12, -4), Color("B1AA8D"), 3)

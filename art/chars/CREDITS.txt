@@ -45,3 +45,44 @@ blue/steel Ironhide with angular armour fins. Bosses are displayed at 3x instead
 (1.5 times their previous visual size), including attacks and corpses.
 Review: tools/EnemyDesignPreview.tscn (headless: validates 1,120 sprite cells;
 graphical: exercises eight facings, attacks and corpses and saves review screenshots under .tmp).
+
+Integrated player combat sprites
+--------------------------------
+art/chars/scout.png, healer.png and engineer.png; chars.json per-role combat regions:
+9 attack variants x 8 directions x 6 complete poses for each role (1,296 frames).
+Body, role-coloured sleeves/skin, hands, weapon and depth ordering are authored together
+by tools/player_combat_art.gd using the existing PixelChars body/palette helpers.
+Frames are tightly packed with transparent gutters and individual foot anchors.
+These code-authored additions were made with Codex; no external or AI-generated images.
+The original walking, gathering, downed and working cells are preserved in the top band.
+All complete combat sprites are packed below that band in the same role PNG.
+There are no separate weapon-effect PNGs; runtime and AnimViewer use the same regions.
+Enemy sheets are preserved.
+
+Held-item player sprites
+------------------------
+Each role PNG also contains two idle and four walking poses in eight directions
+for all 25 inventory items, three radio components and empty hands (4,176 poses).
+Role bodies, hands and carried items are baked into each complete frame offline
+by tools/player_combat_art.gd; ordinary item art reuses the project item PNGs.
+Keys and radio components use matching native pixel shapes and palettes.
+Identical poses share atlas regions; no runtime weapon/item composition is used.
+chars.json per-role held clips index these poses. Original top-band cells remain intact.
+
+Held weapons are rasterized at half their former size around the grip, before
+full-size hands/body are drawn. Resting weapons point downward beside the body.
+Attack sprites use the same compact weapon dimensions; a shared runtime ground
+stroke shows damage reach. Harvesting art is unchanged. Nearest-neighbour
+authoring preserves hard pixel edges.
+
+Backpack icon: art/items/backpack.png is a native 16px pixel icon authored
+by tools/bag_art.gd, using the existing item-art style. Backpack
+carrying poses are included in each player sheet for item-art completeness.
+
+Juggernaut skill sprites
+-----------------------
+The same boss_juggernaut.png includes 144 additional full-body poses in eight
+directions: slam_wind (6), slam_hit (4), charge_wind (4), charge_run (4).
+Authored offline by tools/pixel_enemies.gd --only=juggernaut. The original
+14 columns, six other boss sheets and three regular enemies are preserved.
+Runtime selects these atlas clips from the authoritative special timing.

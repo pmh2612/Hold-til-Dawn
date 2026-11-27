@@ -6,6 +6,7 @@ extends RefCounted
 
 # constants shared with WorldGeometry
 const TL = WorldGeometry.TL
+const MOUTH_HALF_TILES: float = 3.2
 
 static func cave_ground_contains(offset: Vector2, margin: float = 0) -> bool:
 	var r: Vector2 = WorldGeometry.cave_radii + Vector2.ONE * margin
@@ -34,10 +35,10 @@ static func build_walkable_cave(world: WorldGeometry) -> void:
 	world.cave_centre = (WorldLandmarks.at(world, 16) - WorldLandmarks.tl(12, 0)).round()
 	world.lm_at[16] = world.cave_entrance
 	world.cave_walls.clear()
-	var shape = [WorldLandmarks.tl(12, -2.4), WorldLandmarks.tl(8, -2.6), WorldLandmarks.tl(6, -5.1), WorldLandmarks.tl(1, -6), WorldLandmarks.tl(-4, -5.8), WorldLandmarks.tl(-10, -3.8), WorldLandmarks.tl(-11, -0.8), WorldLandmarks.tl(-10.2, 3.5), WorldLandmarks.tl(-6, 5.6), WorldLandmarks.tl(0, 6.2), WorldLandmarks.tl(6, 5.2), WorldLandmarks.tl(8.6, 2.7), WorldLandmarks.tl(12, 2.4)]
+	var shape = [WorldLandmarks.tl(12, -MOUTH_HALF_TILES), WorldLandmarks.tl(8, -3.4), WorldLandmarks.tl(6, -5.1), WorldLandmarks.tl(1, -6), WorldLandmarks.tl(-4, -5.8), WorldLandmarks.tl(-10, -3.8), WorldLandmarks.tl(-11, -0.8), WorldLandmarks.tl(-10.2, 3.5), WorldLandmarks.tl(-6, 5.6), WorldLandmarks.tl(0, 6.2), WorldLandmarks.tl(6, 5.2), WorldLandmarks.tl(8.6, 3.4), WorldLandmarks.tl(12, MOUTH_HALF_TILES)]
 	world.cave_floor = shape.map(func(p): return (world.cave_centre + p).round())
 	build_cave_roof(world)
-	# No closing wall on the east: an opening almost five tiles wide, with an unobstructed central aisle.
+	# No closing wall on the east. The wide mouth clears both player and boss bodies beside the bridge.
 	var i: int = 0
 	while i < world.cave_floor.size() - 1:
 		var a: Vector2 = world.cave_floor[i]
@@ -50,6 +51,8 @@ static func build_walkable_cave(world: WorldGeometry) -> void:
 			var q: Vector2 = a.lerp(b, (j + 1.0) / n) + along * 6
 			var across: Vector2 = (b - a).normalized().orthogonal() * 23
 			var lift: Vector2 = Vector2(0, -39 - (i * 13 + j * 7) % 22)
+			# Lower the eastern jambs into the doorway so their raised caps do not close its aisle.
+			lift *= clampf((world.cave_entrance.x - p.lerp(q, 0.5).x) / (5.0 * TL), 0.0, 1.0)
 			var cap = [(p + across + lift + Vector2(3, -7)).round(), (p.lerp(q, 0.47) + across + lift * 1.1).round(), (q + across + lift * 0.9 + Vector2(-3, -4)).round(), (q - across + lift * 0.75).round(), (p.lerp(q, 0.38) - across + lift * 0.93).round(), (p - across + lift * 0.85).round()]
 			var face = [cap[5], cap[4], cap[3], (q - across + Vector2(0, 8)).round(), (p.lerp(q, 0.6) - across + Vector2(2, 11)).round(), (p - across + Vector2(0, 5)).round()]
 			var facet = [cap[0], cap[1], cap[4], cap[5]]
@@ -57,6 +60,7 @@ static func build_walkable_cave(world: WorldGeometry) -> void:
 			var crack = [cap[1], cap[4].lerp(cap[3], 0.24).round(), face[4].lerp(face[3], 0.34).round()]
 			world.cave_walls.append([face, cap, facet, strata, crack])
 		i += 1
+	build_wall_colliders(world)
 	# Geological dressing stays outside the mining lanes; only loose resource rocks can be harvested.
 	for _it1 in [[-9.0, -4.7], [-6.0, -6.4], [2.0, -6.9], [5.0, 6.4], [-7.0, 6.5]]:
 		var x = _it1[0]
@@ -67,6 +71,32 @@ static func build_walkable_cave(world: WorldGeometry) -> void:
 	world.compound_entrances[16] = world.cave_entrance + WorldLandmarks.tl(1.5, 0)
 	WorldLandmarks.clear(world, world.cave_centre, WorldGeometry.cave_radii.x + TL)
 	build_cave_exterior_masks(world)
+
+static func build_wall_colliders(world: WorldGeometry) -> void:
+	# Cover the actual visible faces AND caps, rather than only the narrow floor-edge line.
+	# Bake once into the existing spatially indexed circles, shared by movement, hits and navigation.
+	const CELL_SIZE: float = 16.0
+	const RADIUS: float = 12.0 # Covers every corner of a 16x16 cell.
+	var occupied: Dictionary = {}
+	for wall in world.cave_walls:
+		for polygon in [wall[0], wall[1]]:
+			var outline := PackedVector2Array(polygon)
+			var bounds := Rect2(outline[0], Vector2.ZERO)
+			for point in outline:
+				bounds = bounds.expand(point)
+			var lo := Vector2i((bounds.position / CELL_SIZE).floor())
+			var hi := Vector2i((bounds.end / CELL_SIZE).floor())
+			for y in range(lo.y, hi.y + 1):
+				for x in range(lo.x, hi.x + 1):
+					var key := Vector2i(x, y)
+					if occupied.has(key):
+						continue
+					var at := Vector2(key) * CELL_SIZE
+					var box := PackedVector2Array([at, at + Vector2(CELL_SIZE, 0), at + Vector2.ONE * CELL_SIZE, at + Vector2(0, CELL_SIZE)])
+					if not Geometry2D.intersect_polygons(outline, box).is_empty():
+						occupied[key] = true
+	for key in occupied:
+		WorldLandmarks.solid(world, (Vector2(key) + Vector2.ONE * 0.5) * CELL_SIZE, RADIUS)
 
 static func build_cave_exterior_masks(world: WorldGeometry) -> void:
 	var points = Array(world.cave_floor).duplicate()

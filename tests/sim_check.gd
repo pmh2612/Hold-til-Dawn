@@ -31,6 +31,11 @@ func _ready() -> void:
 
 func run_checks() -> void:
 	var arguments = OS.get_cmdline_user_args()
+	if arguments.has("--bosses-only"):
+		check_bosses()
+		print("FAILED %d" % [fails] if fails else "ALL OK")
+		get_tree().quit(1 if fails else 0)
+		return
 	if not arguments.has("--mechanics-only"):
 		check_progression()
 	if not arguments.has("--progression-only"):
@@ -83,7 +88,7 @@ func check_progression() -> void:
 	s.set_count(eng, "stone", 12)
 	s.action(1, "craft", 1)
 	self.run(s, 3.1)
-	self.check(s.count(eng, "stone_spear") == 0, "stone spear locked before night 1")
+	self.check(s.count(eng, "stone_spear") == 1, "stone spear can be crafted on day one")
 	s.t = 0
 	self.run(s, 0.1)
 	self.check(s.phase == "dusk", "day -> dusk")
@@ -104,7 +109,7 @@ func check_progression() -> void:
 	self.run(s, 16, "night")
 	s.action(1, "skip", 0)
 	self.run(s, 0.1)
-	self.check(s.k == 2 and s.phase == "day" and s.unlock == 1, "night 1 cleared, stone tier unlocked")
+	self.check(s.k == 2 and s.phase == "day" and s.unlock == 1, "night 1 cleared and progression advances")
 	s.action(1, "skip", 0)
 	self.run(s, 0.1)
 	self.run(s, 16, "night")
@@ -532,7 +537,7 @@ func check_bosses() -> void:
 		s.spawn_boss()
 		hp.append(roundi(s.boss().maxhp))
 	self.check(hp == [3900, 4680, 3510, 3120, 4290, 3120, 2730], "boss HP per archetype at n = 4 matches table 4.2: " + Cs.s(hp))
-	# Juggernaut: line telegraph, dash, 35 damage and knockback, then a slam and a 2 s recovery
+	# Juggernaut: line telegraph, dash, 35 damage and knockback, then a slam and immediate pursuit
 	s = self.boss_match(GameSim.JUGGERNAUT)
 	var b = s.boss()
 	var v = s.players[2]
@@ -544,7 +549,7 @@ func check_bosses() -> void:
 	self.run(s, 2.0)
 	self.check(v.hp <= v.maxhp - 35, "the charge hits the player on the line for 35 (hp %d)" % [v.hp])
 	self.run(s, 1.5)
-	self.check(b.act == "recover", "after the dash it slams and then recovers for 2 s")
+	self.check(b.act != "recover", "after the dash and slam it resumes hunting without a recovery pause")
 	# Broodmother: 2 Grunts per summon, at most 4, gone with the boss, no drops
 	s = self.boss_match(GameSim.BROODMOTHER)
 	b = s.boss()
@@ -690,15 +695,15 @@ func check_bots() -> void:
 	self.check(gb.hp < ghp or not s.enemies.has(gb), "a bot fights an enemy near its post")
 	s.enemies.clear()
 	var me = s.players[1]
-	# Isolate this ability from flask charges spent during the denser daytime encounters.
-	hb.flasks = 3
+	# Healing now requires a carried consumable, including for bots.
+	s.set_count(hb, "healing_flask", 1)
 	hb.bot_cd = 0.0
 	hb.hp = hb.maxhp
 	sb.hp = sb.maxhp
 	me.pos = hb.pos + Vector2(32, 0)
 	me.hp = 20.0
 	self.run(s, 1.5)
-	self.check(me.hp >= 60.0 and hb.flasks < 3, "the Healer bot throws a flask at a hurt teammate")
+	self.check(me.hp >= 28.0 and s.count(hb, "healing_flask") == 0, "the Healer bot consumes a crafted flask to heal a hurt teammate over time")
 	me.state = 1
 	me.bleed = 60.0
 	me.pos = hb.pos + GameSim.DOOR_DIR[dn] * 5 * 32
@@ -721,7 +726,7 @@ func check_items() -> void:
 	var sc = s.players[2]
 	var he = s.players[3]
 	self.check(eng.inv.size() == 8 and eng.inv[0][0] == "hammer" and eng.inv.filter(func(x): return x != null).size() == 1, "Engineer starts with only the hammer in 8 slots")
-	self.check(sc.inv[0][0] == "starter_bow" and he.inv.all(func(x): return x == null) and he.flasks == 3, "Scout starts with a starter bow; the Healer with empty hands and 3 flasks")
+	self.check(sc.inv[0][0] == "starter_bow" and he.inv.all(func(x): return x == null) and not he.has("flasks"), "Scout starts with a starter bow; Healer starts empty-handed with no free healing charges")
 	self.check(he.weapon == "fists" and GameSim.WEAPON_STATS["fists"][0] == 15.0, "an empty hand fights bare-handed with the basic weapon's numbers (BAL-08)")
 	s.set_count(eng, "wood", 45)
 	self.check(s.count(eng, "wood") == 45 and eng.inv[2][1] == 20 and s.room(eng, "wood") == 15 + 4 * 20, "stacks hold 20 units")

@@ -31,6 +31,9 @@ static func at_bench(sim: GameSim, p) -> bool:
 static func craft_role(recipe) -> int:
 	return 1 if recipe[3] == "healing_flask" else 2 if recipe[5] else -1
 
+static func can_craft_here(sim: GameSim, p, idx: int) -> bool:
+	return sim.phase in ["day", "dusk", "night"] if GameSim.RECIPES[idx][3] == "revive" else at_bench(sim, p)
+
 # Checks every rule of MEC-10; Note() tells the player why not.
 static func can_craft(sim: GameSim, p, idx: int, tell: bool = true) -> bool:
 	if idx < 0 or idx >= GameSim.RECIPES.size():
@@ -38,7 +41,7 @@ static func can_craft(sim: GameSim, p, idx: int, tell: bool = true) -> bool:
 	var r = GameSim.RECIPES[idx]
 	var role: int = craft_role(r)
 	var why = ""
-	if p.state != 0 or not at_bench(sim, p):
+	if p.state != 0 or not can_craft_here(sim, p, idx):
 		why = "Move to workbench"
 	elif sim.radio_builder == int(p.id):
 		why = "Radio repair in progress"
@@ -51,6 +54,8 @@ static func can_craft(sim: GameSim, p, idx: int, tell: bool = true) -> bool:
 	elif r[3] == "base" and sim.base_hp >= BASE_HP:
 		why = "Generator full"
 	elif SimInventory.kind_of(r[3]) == "armour" and GameSim.ARMOUR_ITEMS.find(r[3]) <= int(p.armour):
+		why = "Already worn"
+	elif SimInventory.kind_of(r[3]) == "bag" and GameSim.BAG_ITEMS.find(r[3]) <= int(p.get("bag_tier", 0)):
 		why = "Already worn"
 	else:
 		for res in r[1]:
@@ -74,11 +79,12 @@ static func craft(sim: GameSim, p, idx) -> void:
 		return
 	p.craft_idx = int(idx)
 	p.craft_t = 0.0
+	p.craft_pos = Vector2(p.pos)
 
 static func tick_craft(sim: GameSim, p, dt) -> void:
 	if p.craft_idx < 0:
 		return
-	if p.state != 0 or not at_bench(sim, p):
+	if p.state != 0 or not can_craft_here(sim, p, int(p.craft_idx)) or Vector2(p.pos).distance_squared_to(p.get("craft_pos", p.pos)) > 16:
 		p.craft_idx = -1
 		return
 	p.activity = "craft"
@@ -123,10 +129,12 @@ static func reset_player(sim: GameSim, p) -> void:
 	p.armour = 0
 	p.craft_idx = -1
 	p.craft_t = 0.0
-	p.flasks = 3 if p.role == 1 else 0
 	p.invuln = 0.0
 	p.atk_cd = 0.0
 	p.swing = 0.0
+	p.attack_sequence = 0
+	p.attack_item = ""
+	p.attack_aim = 0.0
 	p.channel = 0.0
 	p.repair_kit_t = 0.0
 	p.tower_build_t = 0.0
@@ -263,6 +271,17 @@ static func tick_entry(sim: GameSim, p, dt) -> void:
 		SimPhases.teleport(sim, p, GameSim.DOOR_POS[door] + GameSim.DOOR_DIR[door] * T)
 		p.invuln = 0.5
 
+# All weapon paths share the faster cadence; the Scout retains its 25% bonus.
+static func attack_interval(weapon: String, role: int) -> float:
+	return 1.0 / (float(GameSim.WEAPON_STATS[weapon][1]) * GameSim.WEAPON_ATTACK_SPEED * (1.25 if role == 0 else 1.0))
+
+# Animation identity survives consuming the last arrow or changing the selected slot mid-swing.
+static func begin_attack_pose(p, item: String, duration: float) -> void:
+	p.swing = duration
+	p.attack_sequence = int(p.get("attack_sequence", 0)) + 1
+	p.attack_item = item
+	p.attack_aim = float(p.aim)
+
 # MEC-02 / MEC-03: a melee swing hits every enemy in the 90-degree arc once; a bow fires one arrow.
 static func attack(sim: GameSim, p) -> void:
 	var selected = SimTacticalItems.selected_item(sim, p)
@@ -273,14 +292,13 @@ static func attack(sim: GameSim, p) -> void:
 		SimTacticalItems.attack_long_spear(sim, p)
 		return
 	var st = GameSim.WEAPON_STATS[w]
-	if st[4] and not SimInventory.take(sim, p, "arrow", 1):
+	if st[4] and not SimInventory.use_bow_arrow(p):
 		note(sim, p, "No arrows")
 		SimAudio.emit(sim, "empty_bow", p.pos, p.id)
 		p.atk_cd = 0.5
 		return
-	# BAL-07: the Scout attacks 1.25x faster
-	p.atk_cd = 1.0 / (st[1] * (1.25 if p.role == 0 else 1.0))
-	p.swing = 0.25
+	p.atk_cd = attack_interval(w, int(p.role))
+	begin_attack_pose(p, w, GameSim.WEAPON_SWING_TIME)
 	SimAudio.emit(sim, "bow" if st[3] else "attack_" + str(w), p.pos, p.id)
 	var dir = Vector2.from_angle(p.aim)
 	if st[3]:
@@ -338,6 +356,8 @@ static func threat(sim: GameSim, e, pid) -> float:
 
 # Chase the top threat; switch only when a newcomer's threat beats the current target's by 20%.
 static func retarget(sim: GameSim, e) -> void:
+	if e.type == BOSS:
+		return # Boss hunting uses proximity, independently of damage threat.
 	e.hits = e.hits.filter(func(h): return sim.clock - h[0] <= 5.0)
 	var cur: float = threat(sim, e, e.target)
 	for h in e.hits:
@@ -355,15 +375,13 @@ static func hit(sim: GameSim, e, dmg, p) -> void:
 	e.nodmg = 0.0
 	p.dmg += dmg
 	SimBosses.boss_on_hit(sim, e)
-	# Grunts and bosses retaliate unless locked on a door or tower; Wreckers never do (AGT-01..03).
-	if (e.type == GRUNT or e.type == BOSS) and (e.state <= 1 or e.state == 4):
+	# Grunts retaliate by damage threat; bosses choose the nearest player in their own AI.
+	if e.type == GRUNT and (e.state <= 1 or e.state == 4):
 		e.hits.append([sim.clock, p.id, dmg])
 		if e.state == 0 or e.state == 4:
-			# BAL-35: a boss ignores new threat for 10 s after its leash broke
-			if e.get("calm", 0.0) <= 0:
-				e.state = 1
-				e.anchor = e.pos
-				e.target = p.id
+			e.state = 1
+			e.anchor = e.pos
+			e.target = p.id
 		else:
 			retarget(sim, e)
 	if e.hp <= 0:
@@ -486,16 +504,6 @@ static func hurt(sim: GameSim, p, dmg) -> void:
 		p.state = 1
 		p.bleed = 30.0
 		say(sim, "%s is down" % [p.name])
-
-static func flask(sim: GameSim, p, aim_point) -> void:
-	if p.role != 1 or p.flasks <= 0 or p.state != 0:
-		return
-	var target = p
-	for q in sim.players.values():
-		if q.state == 0 and q.id != p.id and q.pos.distance_to(p.pos) <= 3 * T and q.pos.distance_to(aim_point) < T:
-			target = q
-	target.hp = minf(target.maxhp, target.hp + 40.0)
-	p.flasks -= 1
 
 static func say(sim: GameSim, s) -> void:
 	sim.msg = s

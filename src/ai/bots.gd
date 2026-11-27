@@ -85,11 +85,6 @@ static func think(sim, p, slot, dt) -> void:
 		else:
 			p.inter = true
 		return
-	if p.role == 1 and p.flasks > 0 and p.bot_cd <= 0:
-		var hurt = nearest(sim, p, func(q): return q.state == 0 and q.hp < FLASK_AT * q.maxhp, 3.0 * T)
-		if hurt != null or p.hp < FLASK_AT * p.maxhp:
-			sim.flask(p, hurt.pos if hurt != null else p.pos)
-			p.bot_cd = 1.0
 	if p.hp < BANDAGE_AT * p.maxhp and sim.count(p, "bandage") > 0 and p.channel <= 0 and foe_d > 3.0 * T:
 		sim.action(p.id, "bandage", 0)
 	if p.channel > 0 and foe_d > 1.5 * T:
@@ -106,7 +101,7 @@ static func think(sim, p, slot, dt) -> void:
 		return
 	if p.role == 1 and sim.phase != "day":
 		var far = nearest(sim, p, func(q): return q.state == 0 and q.hp < FLASK_AT * q.maxhp, 10.0 * T)
-		if far != null and p.flasks > 0:
+		if far != null and sim.count(p, "healing_flask") > 0:
 			move(sim, p, far.pos, dt)
 			return
 	if p.role == 2 and sim.count(p, "wood") > 0 and repair(sim, p, dt):

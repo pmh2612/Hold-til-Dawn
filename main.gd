@@ -233,7 +233,7 @@ func move(dt) -> void:
 		send_acc = 0.0
 		# from the body, not the feet
 		var aim = (get_global_mouse_position() - (local_pos - Vector2(0, LIFT))).angle()
-		var primary_attack: bool = build_menu.filter_primary_attack(Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT))
+		var primary_attack: bool = inventory.filter_primary_attack(build_menu.filter_primary_attack(Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)))
 		var atk = playing and not inventory.ui_captures_mouse() and primary_attack
 		var hand_item = me[7][int(me[25])]
 		if hand_item != null and SimTacticalItems.is_tactical_use(Cs.s(hand_item[0])):
@@ -271,7 +271,7 @@ func _unhandled_input(input_event) -> void:
 	elif ev is InputEventMouseButton:
 		# the pause and result screens are Controls and take their clicks first (ui/menu/pause_screen.tscn,
 		# ui/menu/result_screen.tscn); then the panels, then the world (right mouse = flask)
-		if build_menu.build_mouse(ev) or inventory.inventory_mouse(ev) or craft_panel.craft_mouse(ev):
+		if inventory.hotbar_mouse(ev) or build_menu.build_mouse(ev) or inventory.inventory_mouse(ev) or craft_panel.craft_mouse(ev):
 			return
 		if ev.pressed and ev.button_index == 1 and not inventory.ui_captures_mouse():
 			var me = snap.ps.get(my_id)
@@ -477,7 +477,7 @@ func _process(delta: float) -> void:
 		my_light.texture_scale = lerpf(30.0 * T, r, night) * 2.0 / 256.0
 
 static func night_sight_radius(role: int) -> float:
-	return (6.5 if role == 0 else 5.0) * T
+	return GameSim.SCOUT_NIGHT_SIGHT if role == 0 else 5.0 * T
 
 # Bosses are team threats, visible beyond personal night sight. Ordinary enemies still need light.
 func enemy_visible_at(pos: Vector2, enemy_type: int = -1) -> bool:
@@ -1024,12 +1024,13 @@ func build_scene() -> void:
 	for n in lm_idx:
 		spr[n] = [load("res://art/landmarks/" + Cs.s(n) + ".png"), Vector2(lm_idx[n][0], lm_idx[n][1])]
 	cinfo = JSON.parse_string(FileAccess.get_file_as_string(Cs.s(CHARS) + "chars.json"))
-	# the seven bosses come from tools/PixelBosses.cs in the same sheet layout
+	# Enemy sheets match player pixel density; bosses retain their larger world footprint.
 	var bj = JSON.parse_string(FileAccess.get_file_as_string(Cs.s(CHARS) + "bosses.json"))
 	for n in bj.chars:
 		cinfo.chars[n] = bj.chars[n]
 	for n in cinfo.chars:
 		csheet[n] = load(Cs.s(CHARS + n) + ".png")
+	player_view.load_combat_art()
 	inventory.load_item_art()
 	var pj = JSON.parse_string(FileAccess.get_file_as_string(Cs.s(PROPS) + "props.json"))
 	for n in pj:

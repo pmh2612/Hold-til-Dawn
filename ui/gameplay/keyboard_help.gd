@@ -25,7 +25,7 @@ const ACTIONS = {
 	"F": ["Enter", ENGINEER, "ENTER / LEAVE", "Engineer | Night only\nHold F at intact door"],
 	"G": ["Give/drop", ACTION, "GIVE / DROP", "Give stack to nearby ally.\nNo ally: drop stack."],
 	"H": ["Help", MENU, "CONTROLS", "H / Esc: close"],
-	"C": ["Craft", SUPPORT, "CRAFT / RADIO", "Workbench / radio nearby"],
+	"C": ["Craft", SUPPORT, "CRAFT / RADIO", "Workbench / radio nearby\nRevival kit: anywhere"],
 	"V": ["Vote", ACTION, "SKIP DAY", "Vote when available"],
 	"M": ["Map", MENU, "ISLAND MAP", "M: open / close"],
 	"Ctrl": ["Zoom", MENU, "ZOOM", "Ctrl + wheel"]
@@ -129,7 +129,7 @@ func draw_mouse(c: Control) -> void:
 	main.text(c, Vector2(804, 178), "Flask /", 10, MENU, 1, 80)
 	main.text(c, Vector2(804, 193), "use item", 10, MENU, 1, 80)
 	arrow(c, Vector2(767, 229), Vector2(767, 155), PAPER)
-	main.text(c, Vector2(649, 246), "Wheel: select slot", 10, PAPER, 1, 235)
+	main.text(c, Vector2(649, 246), "Click slot / wheel: select", 10, PAPER, 1, 235)
 	main.text(c, Vector2(649, 263), "Ctrl + wheel: zoom", 10, MUTED, 1, 235)
 
 func draw_details(c: Control, action: Array) -> void:

@@ -13,6 +13,51 @@ var p
 var ally
 var field: Vector2 = Vector2(0, 640)
 
+# Hold the attack input through the real player tick, rather than calling attacks through cooldowns.
+func check_weapon_cadence() -> void:
+	var old_rates = {"fists": 1.5, "stone_spear": 1.5, "titanium_blade": 1.5, "hammer": 1.2, "long_spear": 1.0, "stun_maul": 0.65, "starter_bow": 1.0, "bow": 1.0}
+	var dt: float = 1.0 / 60.0
+	for role in range(3):
+		for weapon in old_rates:
+			reset()
+			p.role = role
+			p.sel = 0
+			if weapon != "fists":
+				give(weapon, 1)
+			give("arrow", 30)
+			p.atk = true
+			p.aim = 0.0
+			sim.audio_events.clear()
+			var strikes: Array = []
+			var expected_gap: float = 1.0 / (float(old_rates[weapon]) * 1.5 * (1.25 if role == 0 else 1.0))
+			for frame in range(180):
+				var before: int = sim.audio_sequence
+				sim.clock += dt
+				sim.tick_players(dt)
+				if sim.audio_sequence > before:
+					strikes.append(frame * dt)
+			var gaps_ok: bool = strikes.size() >= 3
+			for i in range(1, strikes.size()):
+				var gap: float = float(strikes[i]) - float(strikes[i - 1])
+				gaps_ok = gaps_ok and gap >= expected_gap - 0.001 and gap <= expected_gap + dt + 0.001
+			check(gaps_ok, "%s / %s repeats attacks 50%% faster without bypassing cooldown" % [GameSim.ROLES[role], weapon])
+			if weapon in ["bow", "starter_bow"]:
+				check(sim.arrows.size() == strikes.size() and sim.count(p, "arrow") == 30 - (strikes.size() if weapon == "bow" else 0), "%s / %s fires once per attack with correct ammunition use" % [GameSim.ROLES[role], weapon])
+			p.atk = false
+			var stopped: int = sim.audio_sequence
+			sim.tick_players(2.0)
+			check(sim.audio_sequence == stopped, "%s / %s stops attacking when released" % [GameSim.ROLES[role], weapon])
+	reset()
+	give("bow", 1)
+	give("explosive_arrow", 3)
+	check(sim.use_tactical_item(p, "explosive_arrow", field + Vector2(200, 0)), "first explosive arrow fires")
+	p.atk_cd -= 0.61
+	advance(0.61)
+	check(not sim.use_tactical_item(p, "explosive_arrow", field + Vector2(200, 0)) and sim.count(p, "explosive_arrow") == 2, "explosive arrow cannot bypass its faster cooldown")
+	p.atk_cd -= 0.07
+	advance(0.07)
+	check(sim.use_tactical_item(p, "explosive_arrow", field + Vector2(200, 0)) and sim.count(p, "explosive_arrow") == 1, "explosive arrow can fire again after two thirds of a second")
+
 func reset() -> void:
 	sim.phase = "day"
 	sim.clock = 10.0
@@ -73,7 +118,8 @@ func run() -> void:
 	sim.action(1, "start", 0)
 	p = sim.players[1]
 	ally = sim.players[2]
-	check(GameSim.RECIPES.size() == 16 and not GameSim.ITEMS.has("wood_shield"), "16 approved recipes, no shield")
+	check_weapon_cadence()
+	check(GameSim.RECIPES.size() == 18 and not GameSim.ITEMS.has("wood_shield"), "18 approved recipes including hammer and backpack, no shield")
 	for i in range(GameSim.RECIPES.size()):
 		reset()
 		p.pos = GameSim.WORKBENCH_POS + Vector2(0, 24)
@@ -91,6 +137,11 @@ func run() -> void:
 				sim.action(1, "craft", i)
 				check(p.craft_idx < 0 and sim.count(p, "herb") == 6 and sim.count(p, "titanium") == 2, "direct non-Healer craft request cannot spend flask materials")
 			p.role = 1
+		if id == "hammer":
+			for role in range(3):
+				p.role = role
+				check(sim.can_craft(p, i, false), GameSim.ROLES[role] + " can craft the day-one hammer")
+			p.role = 2
 		check(sim.can_craft(p, i, false), id + " affordable at correct tier")
 		if tier > 0:
 			sim.unlock = tier - 1
@@ -102,7 +153,7 @@ func run() -> void:
 		sim.tick_craft(p, duration - 0.1)
 		check(p.craft_idx == i, id + " requires full craft time")
 		sim.tick_craft(p, 0.11)
-		var crafted: bool = sim.base_hp == 600 if id == "base" else p.armour == GameSim.ARMOUR_ITEMS.find(id) if SimInventory.kind_of(id) == "armour" else sim.count(p, id) == int(r[4])
+		var crafted: bool = sim.base_hp == 600 if id == "base" else p.armour == GameSim.ARMOUR_ITEMS.find(id) if SimInventory.kind_of(id) == "armour" else p.bag_tier == GameSim.BAG_ITEMS.find(id) and p.inv.size() >= GameSim.INV_SLOTS + GameSim.BAG_BONUS[p.bag_tier] if SimInventory.kind_of(id) == "bag" else sim.count(p, id) == int(r[4])
 		check(crafted, id + " craft output")
 		for res in r[1]:
 			check(sim.count(p, res) == 0, id + " spends " + Cs.s(res))
@@ -202,7 +253,7 @@ func run() -> void:
 	p.aim = 0.0
 	grunt = enemy(field + Vector2(24, 0))
 	sim.attack(p)
-	check(grunt.hp == 170.0 and grunt.get("stun_until", 0.0) > sim.clock and p.atk_cd > 1.5, "maul damages / stuns with slow attack cadence")
+	check(grunt.hp == 170.0 and grunt.get("stun_until", 0.0) > sim.clock and is_equal_approx(float(p.atk_cd), 1.0 / (0.65 * 1.5)), "maul damages / stuns with its faster heavy-weapon cadence")
 	boss = boss_at(field + Vector2(25, 0))
 	sim.attack(p)
 	check(boss.get("slow_until", 0.0) > sim.clock and boss.get("stun_until", 0.0) == 0.0, "maul slows boss instead of stunning")

@@ -2,108 +2,128 @@
 	"chars": {
 		"boss_bio_cannon": {
 			"anchor": [
-				24.0,
-				46
+				78.0,
+				144.0
 			],
 			"anims": {
 				"attack": [
-					6,
-					4,
+					6.0,
+					4.0,
 					10.0
 				],
 				"down": [
-					10,
-					4,
+					10.0,
+					4.0,
 					8.0
 				]
 			},
-			"body": 48,
-			"size": 48
+			"body": 144.0,
+			"gutter": 6.0,
+			"pixel_art": true,
+			"resolution": 3.0,
+			"size": 156.0,
+			"smooth": false
 		},
 		"boss_broodmother": {
 			"anchor": [
-				24.0,
-				46
+				78.0,
+				144.0
 			],
 			"anims": {
 				"attack": [
-					6,
-					4,
+					6.0,
+					4.0,
 					10.0
 				],
 				"down": [
-					10,
-					4,
+					10.0,
+					4.0,
 					8.0
 				]
 			},
-			"body": 48,
-			"size": 48
+			"body": 144.0,
+			"gutter": 6.0,
+			"pixel_art": true,
+			"resolution": 3.0,
+			"size": 156.0,
+			"smooth": false
 		},
 		"boss_burrower": {
 			"anchor": [
-				24.0,
-				46
+				78.0,
+				144.0
 			],
 			"anims": {
 				"attack": [
-					6,
-					4,
+					6.0,
+					4.0,
 					10.0
 				],
 				"down": [
-					10,
-					4,
+					10.0,
+					4.0,
 					8.0
 				]
 			},
-			"body": 48,
-			"size": 48
+			"body": 144.0,
+			"gutter": 6.0,
+			"pixel_art": true,
+			"resolution": 3.0,
+			"size": 156.0,
+			"smooth": false
 		},
 		"boss_gatebreaker": {
 			"anchor": [
-				24.0,
-				46
+				78.0,
+				144.0
 			],
 			"anims": {
 				"attack": [
-					6,
-					4,
+					6.0,
+					4.0,
 					10.0
 				],
 				"down": [
-					10,
-					4,
+					10.0,
+					4.0,
 					8.0
 				]
 			},
-			"body": 48,
-			"size": 48
+			"body": 144.0,
+			"gutter": 6.0,
+			"pixel_art": true,
+			"resolution": 3.0,
+			"size": 156.0,
+			"smooth": false
 		},
 		"boss_ironhide": {
 			"anchor": [
-				24.0,
-				46
+				78.0,
+				144.0
 			],
 			"anims": {
 				"attack": [
-					6,
-					4,
+					6.0,
+					4.0,
 					10.0
 				],
 				"down": [
-					10,
-					4,
+					10.0,
+					4.0,
 					8.0
 				]
 			},
-			"body": 48,
-			"size": 48
+			"body": 144.0,
+			"gutter": 6.0,
+			"pixel_art": true,
+			"resolution": 3.0,
+			"size": 156.0,
+			"smooth": false
 		},
 		"boss_juggernaut": {
 			"anchor": [
-				24.0,
-				46
+				78.0,
+				144.0
 			],
 			"anims": {
 				"attack": [
@@ -111,34 +131,62 @@
 					4,
 					10.0
 				],
+				"charge_run": [
+					28,
+					4,
+					16.0
+				],
+				"charge_wind": [
+					24,
+					4,
+					4.0
+				],
 				"down": [
 					10,
 					4,
 					8.0
+				],
+				"slam_hit": [
+					20,
+					4,
+					16.0
+				],
+				"slam_wind": [
+					14,
+					6,
+					6.0
 				]
 			},
-			"body": 48,
-			"size": 48
+			"body": 144,
+			"gutter": 6,
+			"pixel_art": true,
+			"resolution": 3,
+			"size": 156,
+			"smooth": false
 		},
 		"boss_phantom": {
 			"anchor": [
-				24.0,
-				46
+				78.0,
+				144.0
 			],
 			"anims": {
 				"attack": [
-					6,
-					4,
+					6.0,
+					4.0,
 					10.0
 				],
 				"down": [
-					10,
-					4,
+					10.0,
+					4.0,
 					8.0
 				]
 			},
-			"body": 48,
-			"size": 48
+			"body": 144.0,
+			"gutter": 6.0,
+			"pixel_art": true,
+			"resolution": 3.0,
+			"size": 156.0,
+			"smooth": false
 		}
 	}
 }
