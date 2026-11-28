@@ -58,19 +58,55 @@ func draw_player(id, p, foot) -> void:
 		main.draw_line(x + Vector2(4, -4), x + Vector2(-4, 4), NEON_RED, 2)
 		return
 	main.anim.down_time(id, false)
+	var poison_left: float = float(main.snap.get("poisoned", {}).get(id, 0.0))
+	var slow_left: float = float(main.snap.get("slowed", {}).get(id, 0.0))
+	var tint: Color = Color.WHITE
+	if poison_left > 0.0:
+		tint = Color.WHITE.lerp(Color("66F258"), 0.45 + 0.2 * sin(float(main.clock) * 9.0))
+		draw_poison_ground(Vector2(foot))
+	elif slow_left > 0.0:
+		tint = Color.WHITE.lerp(Color("7ADFFF"), 0.42 + 0.15 * sin(float(main.clock) * 7.0))
 	var hit = main.anim.hit_reaction(id, p)
 	if hit != null:
 		main.shadow(Vector2(foot), 10.0)
-		if hit[0] == "stunned":
-			self.char_(id, skin, Vector2(foot), float(hit[3]), 1.0, Color.WHITE, false, "idle", "idle", 0.0)
-			var head: Vector2 = Vector2(foot) - Vector2(0, 41)
-			main.draw_arc(head, 9, 0, TAU, 16, Color("D3AA58"), 1.0)
-			for i in range(3):
-				var star: Vector2 = head + Vector2(cos(main.clock * 5 + i * TAU / 3) * 10, sin(main.clock * 5 + i * TAU / 3) * 4)
-				main.draw_line(star - Vector2(2, 0), star + Vector2(2, 0), Color("FFF1A8"), 2.0)
-				main.draw_line(star - Vector2(0, 2), star + Vector2(0, 2), Color("FFF1A8"), 2.0)
+		if hit[0] in ["stunned", "rooted", "shocked"]:
+			var hit_tint: Color = tint.lerp(Color(0.75, 2.0, 2.6), 0.55) if hit[0] == "shocked" else tint
+			self.char_(id, skin, Vector2(foot), float(hit[3]), 1.0, hit_tint, false, "idle", "idle", 0.0)
+			if poison_left > 0.0:
+				draw_poison_bubbles(id, Vector2(foot))
+			if slow_left > 0.0:
+				draw_frost_shards(id, Vector2(foot))
+			if hit[0] == "stunned":
+				var head: Vector2 = Vector2(foot) - Vector2(0, 41)
+				main.draw_arc(head, 9, 0, TAU, 16, Color("D3AA58"), 1.0)
+				for i in range(3):
+					var star: Vector2 = head + Vector2(cos(main.clock * 5 + i * TAU / 3) * 10, sin(main.clock * 5 + i * TAU / 3) * 4)
+					main.draw_line(star - Vector2(2, 0), star + Vector2(2, 0), Color("FFF1A8"), 2.0)
+					main.draw_line(star - Vector2(0, 2), star + Vector2(0, 2), Color("FFF1A8"), 2.0)
+			elif hit[0] == "rooted":
+				for i in range(4):
+					var off_x: float = (i - 1.5) * 6.5
+					var h: float = 11.0 if i in [1, 2] else 8.0
+					var base_pt: Vector2 = Vector2(foot) + Vector2(off_x, 2.0)
+					main.draw_colored_polygon(PackedVector2Array([base_pt - Vector2(3, 0), base_pt + Vector2(3, 0), base_pt + Vector2(off_x * 0.2, -h)]), Color("D6C094"))
+			else:
+				for i in range(4):
+					var a: float = float(main.clock) * 14.0 + i * TAU / 4.0
+					var p0: Vector2 = Vector2(foot) - Vector2(0, 18) + Vector2.from_angle(a) * 10.0
+					var p1: Vector2 = p0 + Vector2.from_angle(a + 0.9) * 7.0
+					main.draw_line(p0, p1, Color(0.7, 2.2, 2.7), 2.0)
 			return
-		self.char_(id, skin, Vector2(foot) - Vector2(0, hit[2]), float(hit[3]), 1.0, Color.WHITE, true, hit[0], hit[0], float(hit[1]))
+		var hit_raw = main.snap.get("hit_reactions", {}).get(id)
+		if hit_raw != null and Cs.s(hit_raw[1]) == "pull":
+			var drag_back: Vector2 = -Vector2(hit_raw[4]).normalized()
+			for i in range(3):
+				var off: float = fposmod(float(main.clock) * 18.0 + i * 7.0, 20.0)
+				var dust_at: Vector2 = Vector2(foot) + drag_back * (4.0 + off) + Vector2(0, -2.0 - i * 1.5)
+				var alpha: float = clampf(1.0 - off / 20.0, 0.0, 0.75)
+				main.draw_circle(dust_at, 3.0 - i * 0.5, Color(0.76, 0.71, 0.62, alpha))
+		self.char_(id, skin, Vector2(foot) - Vector2(0, hit[2]), float(hit[3]), 1.0, tint, true, hit[0], hit[0], float(hit[1]))
+		if poison_left > 0.0:
+			draw_poison_bubbles(id, Vector2(foot) - Vector2(0, hit[2]))
 		return
 	if p[11]:
 		slash_t[id] = main.clock
@@ -97,8 +133,45 @@ func draw_player(id, p, foot) -> void:
 	if attack != null and Cs.s(attack[0]).begins_with("combat_"):
 		var weapon: String = Cs.s(attack[0]).trim_prefix("combat_")
 		main.tactical_items.draw_attack_range(Vector2(foot), aim, weapon, float(attack[1]) / main.anim.anim_length(skin, attack[0]))
-	self.char_(id, skin, foot, aim, 1.0, Color.WHITE, fighting or activity != "idle", activity, _v1 if _v1 != null else gather, _v2 if _v2 != null else 0.0, gather != null, held_item(p))
+	self.char_(id, skin, foot, aim, 1.0, tint, fighting or activity != "idle", activity, _v1 if _v1 != null else gather, _v2 if _v2 != null else 0.0, gather != null, held_item(p))
+	if poison_left > 0.0:
+		draw_poison_bubbles(id, Vector2(foot))
+	if slow_left > 0.0:
+		draw_frost_shards(id, Vector2(foot))
 	self.draw_activity(foot, aim, activity)
+
+func draw_frost_shards(id, foot: Vector2) -> void:
+	var now: float = float(main.clock)
+	for i in range(3):
+		var a: float = now * 3.0 + float(int(id)) + i * TAU / 3.0
+		var at: Vector2 = foot + Vector2(cos(a) * 11.0, -14.0 + sin(a) * 5.0)
+		main.draw_colored_polygon(PackedVector2Array([at - Vector2(0, 3), at + Vector2(2.5, 0), at + Vector2(0, 3), at - Vector2(2.5, 0)]), Color(0.65, 1.9, 2.35, 0.9))
+
+func draw_poison_ground(foot: Vector2) -> void:
+	var pulse: float = 0.55 + 0.3 * sin(float(main.clock) * 8.0)
+	main.draw_set_transform(foot, 0, Vector2(1.0, 0.45))
+	main.draw_circle(Vector2.ZERO, T * 0.44, Color(0.32, 0.88, 0.3, 0.24 * pulse))
+	main.draw_set_transform(Vector2.ZERO)
+
+func draw_poison_bubbles(id, foot: Vector2) -> void:
+	var now: float = float(main.clock)
+	var seed_v: float = float(int(id)) * 1.37
+	# Rising toxic green bubbles around the character's body.
+	for i in range(4):
+		var k: float = fposmod(now * 1.2 + i * 0.25 + seed_v, 1.0)
+		var x_off: float = sin(now * 3.5 + i * 2.1 + seed_v) * 8.0 + (i - 1.5) * 3.5
+		var y_off: float = -4.0 - k * 28.0
+		var at: Vector2 = foot + Vector2(x_off, y_off)
+		var alpha: float = clampf(sin(k * PI) * 1.3, 0.0, 0.95)
+		var r: float = 2.6 - k * 0.8
+		main.draw_circle(at, r + 0.8, Color(0.12, 0.42, 0.16, 0.75 * alpha))
+		main.draw_circle(at, r, Color(0.45, 0.94, 0.36, alpha))
+		main.draw_rect(Rect2((at - Vector2(1, 1)).round(), Vector2(1.5, 1.5)), Color(0.92, 1.0, 0.85, alpha))
+	# Two tiny dripping acid drops falling toward the feet.
+	for j in range(2):
+		var d: float = fposmod(now * 1.6 + j * 0.5 + seed_v, 1.0)
+		var at: Vector2 = foot + Vector2((-5.5 if j == 0 else 5.5), -18.0 + d * 17.0)
+		main.draw_rect(Rect2(at.round(), Vector2(2, 3)), Color(0.46, 0.92, 0.36, 0.85 * (1.0 - d * 0.5)))
 
 # compass octant (0 = right, counting clockwise on screen) to the sheet row
 static var OCT_ROW = [0, 4, 1, 5, 2, 6, 3, 7]

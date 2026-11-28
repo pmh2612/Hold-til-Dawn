@@ -371,8 +371,17 @@ func consume_events(d: Dictionary) -> void:
 		last_event_sequence = int(event[0])
 		var cue: String = "attack_basic" if event[1] == "attack_fists" else event[1]
 		var mine: bool = int(event[3]) == m.my_id and int(event[3]) > 0
-		var db: float = {"drop_spawn": -18., "arrow_hit": -12., "growl": -9., "empty_bow": -15., "boss_slam": -1., "boss_charge": -2., "chain_throw": -3., "chain_catch": -3., "chain_sweep": -3.}.get(cue, -6.)
-		sfx(cue, null if mine else event[2], db, .015 if cue in ["boss_slam", "boss_charge"] else .035, 2 if cue in ["boss_warn", "boss_slam", "boss_charge", "chain_throw", "chain_catch", "chain_sweep"] else 0, int(event[3]))
+		var db: float = {"drop_spawn": -18., "arrow_hit": -12., "growl": -9., "empty_bow": -15.,
+			"boss_slam": -1., "boss_charge": -2., "chain_throw": -3., "chain_catch": -3., "chain_sweep": -3.,
+			"boss_acid_charge": -5., "boss_acid_lob": -3., "boss_acid_splash": -2.,
+			"boss_spine_erupt": -2., "boss_quake_fissure": -2., "boss_tremor_ring": -2.,
+			"boss_phantom_slash": -2., "boss_mirage_dash": -3.,
+			"boss_volt_charge": -4., "boss_lightning_strike": -1., "boss_arc_beam": -2.}.get(cue, -6.)
+		var boss_crit: bool = cue in ["boss_warn", "boss_slam", "boss_charge", "chain_throw", "chain_catch", "chain_sweep",
+			"boss_acid_lob", "boss_acid_splash", "boss_spine_erupt", "boss_quake_fissure", "boss_tremor_ring",
+			"boss_phantom_slash", "boss_mirage_dash", "boss_lightning_strike", "boss_arc_beam",
+			"boss_burrow", "boss_surface", "boss_barrage", "boss_cloak", "boss_ambush"]
+		sfx(cue, null if mine else event[2], db, .015 if cue in ["boss_slam", "boss_charge", "boss_lightning_strike"] else .035, 2 if boss_crit else 0, int(event[3]))
 
 func boss_arrival(e) -> void:
 	sfx("boss_arrival", null, -4., 0., 3)

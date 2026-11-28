@@ -363,7 +363,10 @@ static func tick_proj(sim: GameSim, dt) -> void:
 		b.ttl -= dt
 		if first < INF:
 			if victim != null:
+				var hp_before: float = float(victim.hp)
 				SimPlayers.hurt(sim, victim, b.dmg)
+				if b.get("poison", false) and int(victim.state) == 0 and float(victim.hp) < hp_before:
+					SimPlayers.apply_poison(sim, victim)
 			b.ttl = 0.0
 	sim.proj = sim.proj.filter(func(b): return b.ttl > 0)
 
@@ -386,8 +389,8 @@ static func tick_tele(sim: GameSim, dt) -> void:
 				if in_ and (tl.get("reaction", "") != "stun" or SimWorld.line_clear(sim, tl.pos, p.pos)):
 					var hp_before: float = p.hp
 					SimPlayers.hurt(sim, p, tl.dmg)
-					if p.hp < hp_before and p.state == 0 and tl.get("reaction", "") == "slam":
-						SimPlayers.start_hit_reaction(sim, p, "slam", Vector2(p.pos - tl.pos))
+					if p.hp < hp_before and p.state == 0 and tl.get("reaction", "") in ["slam", "launch_short"]:
+						SimPlayers.start_hit_reaction(sim, p, Cs.s(tl.get("reaction", "")), Vector2(p.pos - tl.pos))
 					elif p.hp < hp_before and p.state == 0 and tl.get("reaction", "") == "stun":
 						SimPlayers.start_hit_reaction(sim, p, "stun", Vector2.ZERO)
 	sim.tele = sim.tele.filter(func(tl): return tl.t > 0)

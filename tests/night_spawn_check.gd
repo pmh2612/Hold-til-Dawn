@@ -75,6 +75,10 @@ func run() -> void:
 			# an empty field brings the next wave forward instead
 			check(events[3][0] < 24 + 5 + sim.night_spawn_spacing + 0.3, "first night: a cleared field brings the next wave in 5 s")
 		check(events.all(func(e): return int(GameSim.ENEMY[e[1]][4]) <= night), "later enemy types remain locked to their night")
+		if night == 2:
+			check(events.any(func(e): return e[1] == GameSim.SPITTER) and not events.any(func(e): return e[1] == GameSim.WRECKER), "night 2 introduces Spitters while Wreckers remain locked")
+		elif night == 3:
+			check(events.any(func(e): return e[1] == GameSim.WRECKER), "night 3 introduces Wreckers")
 		var boss: int = 1 if night == 2 or night == 4 else 0
 		check(quota > boss and events.size() == quota - boss and spawned == events.size(), "night %s: exactly the night's quota of %s regular enemies comes%s" % [night, quota - boss, " (plus the boss)" if boss > 0 else ""])
 		arrivals(sim, night, false)

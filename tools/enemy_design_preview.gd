@@ -83,6 +83,55 @@ func _ready() -> void:
 					if unique.size() < 3:
 						Cs.fail("Juggernaut skill does not animate in direction %s: %s" % [row, clip_name])
 						return
+		elif name == "boss_broodmother":
+			for clip_name in ["sweep_wind", "sweep_hit", "chain_wind", "chain_cast", "chain_pull"]:
+				var clip: Array = info.anims[clip_name]
+				for row in range(8):
+					var unique: Dictionary = {}
+					for col in range(int(clip[0]), int(clip[0]) + int(clip[1])):
+						var pixels: PackedByteArray = sheet.get_region(Rect2i(col * cell, row * cell, cell, cell)).get_data()
+						unique[hash(pixels)] = true
+					if unique.size() < 3:
+						Cs.fail("Chainwarden skill does not animate in direction %s: %s" % [row, clip_name])
+						return
+	var fx_specs: Array = [
+		["chainwarden_sweep", 272, 272, 6, 5],
+		["juggernaut_slam", 224, 224, 6, 5],
+		["juggernaut_charge", 160, 128, 4, 3],
+		["bio_barrage_burst", 144, 144, 5, 4],
+		["acid_bomb", 56, 56, 4, 3],
+		["acid_pool", 160, 160, 6, 5],
+		["burrow_erupt", 176, 176, 6, 5],
+		["burrower_spine", 56, 72, 6, 5],
+		["earthshaker_fissure", 128, 128, 6, 5],
+		["earthshaker_ring", 320, 320, 6, 5],
+		["phantom_slash", 208, 208, 6, 5],
+		["phantom_dash", 128, 64, 5, 4],
+		["phantom_cloak", 160, 160, 6, 5],
+		["volt_lightning", 128, 256, 6, 5],
+		["volt_beam", 288, 64, 4, 3]
+	]
+	for spec in fx_specs:
+		var fx_name: String = spec[0]
+		var fw: int = int(spec[1])
+		var fh: int = int(spec[2])
+		var fcount: int = int(spec[3])
+		var min_unique: int = int(spec[4])
+		var fx_tex = load("res://art/fx/%s.png" % fx_name)
+		var fx_img: Image = fx_tex.get_image() if fx_tex != null else null
+		if fx_img == null or fx_img.get_width() != fw * fcount or fx_img.get_height() != fh:
+			Cs.fail("Missing or mis-sized boss FX sheet: %s" % fx_name)
+			return
+		var fx_unique: Dictionary = {}
+		for col in range(fcount):
+			var frame_img: Image = fx_img.get_region(Rect2i(col * fw, 0, fw, fh))
+			if frame_img.is_invisible() or frame_img.detect_alpha() == Image.ALPHA_BLEND:
+				Cs.fail("Invalid boss FX frame: %s/%s" % [fx_name, col])
+				return
+			fx_unique[hash(frame_img.get_data())] = true
+		if fx_unique.size() < min_unique:
+			Cs.fail("Boss FX sheet does not animate across frames: %s" % fx_name)
+			return
 	if absf(EnemyView.BOSS_DRAW_SCALE / 2.0 - 1.5) > 0.001:
 		Cs.fail("Incorrect boss scale")
 		return
@@ -175,6 +224,8 @@ func draw_chainwarden_skills() -> void:
 			var left: float = duration - fposmod(float(clock), duration)
 			var enemy: Array = [600 + row * 5 + col, GameSim.BOSS, foot, 100.0, 100.0, 35.2, GameSim.CHAINWARDEN, look, 0.0 if row == 0 else PI / 2, false, false, false, left, 99.0]
 			enemy_view.draw_enemy(enemy, foot)
+			if col == 1:
+				enemy_view.draw_chainwarden_sweep_at(foot, 0.0 if row == 0 else PI / 2, SimChainwarden.SWEEP_HIT - left)
 			draw_string(ThemeDB.fallback_font, foot + Vector2(-65, 24), ["Sweep / prepare", "Sweep / strike", "Hook / prepare", "Hook / throw", "Hook / pull"][col], 13)
 	snap.chains = [[Vector2(680, 495), Vector2(840, 495), -1]]
 	enemy_view.draw_chains()

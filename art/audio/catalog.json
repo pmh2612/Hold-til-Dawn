@@ -412,6 +412,39 @@
     ],
     "chain_catch": [
       "res://art/audio/sfx/chain_catch_01.wav"
+    ],
+    "boss_acid_charge": [
+      "res://art/audio/sfx/boss_acid_charge_01.wav"
+    ],
+    "boss_acid_lob": [
+      "res://art/audio/sfx/boss_acid_lob_01.wav"
+    ],
+    "boss_acid_splash": [
+      "res://art/audio/sfx/boss_acid_splash_01.wav"
+    ],
+    "boss_spine_erupt": [
+      "res://art/audio/sfx/boss_spine_erupt_01.wav"
+    ],
+    "boss_quake_fissure": [
+      "res://art/audio/sfx/boss_quake_fissure_01.wav"
+    ],
+    "boss_tremor_ring": [
+      "res://art/audio/sfx/boss_tremor_ring_01.wav"
+    ],
+    "boss_phantom_slash": [
+      "res://art/audio/sfx/boss_phantom_slash_01.wav"
+    ],
+    "boss_mirage_dash": [
+      "res://art/audio/sfx/boss_mirage_dash_01.wav"
+    ],
+    "boss_volt_charge": [
+      "res://art/audio/sfx/boss_volt_charge_01.wav"
+    ],
+    "boss_lightning_strike": [
+      "res://art/audio/sfx/boss_lightning_strike_01.wav"
+    ],
+    "boss_arc_beam": [
+      "res://art/audio/sfx/boss_arc_beam_01.wav"
     ]
   },
   "loops": {

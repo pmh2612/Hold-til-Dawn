@@ -560,18 +560,18 @@ func check_bosses() -> void:
 	b.special_cd = 0.0
 	s.players[2].pos = b.pos + Vector2(0, 3 * 32)
 	self.run(s, 0.1)
-	self.check(b.act == "chain_wind", "Chainwarden opens with a hook wind-up")
+	self.check(b.act in ["chain_fly", "chain_pull"], "Chainwarden opens with an immediate hook throw")
 	self.run(s, 1.5)
 	self.check(not s.enemies.any(func(e): return e.get("summon", false)), "Chainwarden never summons Grunts")
-	# Bio-Cannon: a ring of 8 projectiles
+	# Bio-Cannon: a ring of 16 acid orbs
 	s = self.boss_match(GameSim.BIO_CANNON)
 	b = s.boss()
 	s.players[2].pos = b.pos + Vector2(0, 6 * 32)
 	b.sig_cd = 0.0
-	self.run(s, 0.9)
-	self.check(s.proj.size() == 0, "Bio-Cannon respects the full one-second wind-up")
-	self.run(s, 0.25)  # allow two 20Hz decision steps around the one-second boundary
-	self.check(s.proj.size() == 8, "Bio-Cannon fires a ring of 8 projectiles (%d)" % [s.proj.size()])
+	self.run(s, 0.45)
+	self.check(s.proj.size() == 0, "Bio-Cannon respects its shortened wind-up")
+	self.run(s, 0.15)  # allow two 20Hz decision steps around the 0.5-second boundary
+	self.check(s.proj.size() == 16, "Bio-Cannon fires a ring of 16 projectiles (%d)" % [s.proj.size()])
 	# Burrower: cannot be hit underground, surfaces next to its target
 	s = self.boss_match(GameSim.BURROWER)
 	b = s.boss()
@@ -583,16 +583,15 @@ func check_bosses() -> void:
 	s.hit(b, 50, v)
 	self.check(b.act == "burrow" and b.hp == hp0, "a burrowed Burrower cannot be hit")
 	self.run(s, 4.0)
-	self.check(v.hp <= v.maxhp - 35 and b.pos.distance_to(v.pos) >= 1.4 * 32, "it surfaces at least 1.5 tiles away and hits a player who stays")
-	# Gatebreaker: one 120-point door blow after a 1.0 s wind-up
-	s = self.boss_match(GameSim.GATEBREAKER)
+	self.check(v.hp <= v.maxhp - 10 and b.pos.distance_to(v.pos) >= 1.4 * 32, "it surfaces at least 1.5 tiles away and hits a player who stays for 10 damage")
+	# Earthshaker (NOX-05): replaces old 120-dmg door blow with Shockwave Fissure and Tremor Ring
+	s = self.boss_match(GameSim.EARTHSHAKER)
 	b = s.boss()
 	b.pos = GameSim.DOOR_POS[0] + GameSim.DOOR_DIR[0] * (b.r + 6)
 	b.cd = 0.0
-	self.run(s, 0.5)
-	self.check(s.doors[0] == GameSim.DOOR_HP, "the door blow waits for its wind-up")
-	self.run(s, 0.7)
-	self.check(absf(s.doors[0] - (GameSim.DOOR_HP - 120.0)) < 0.01, "Gatebreaker deals 120 door damage in one blow (%.1f)" % [s.doors[0]])
+	b.sig_cd = INF
+	self.run(s, 0.2)
+	self.check(absf(s.doors[0] - (GameSim.DOOR_HP - 30.0)) < 0.01, "Earthshaker deals normal 30 door damage without the removed 120-point door blow (%.1f)" % [s.doors[0]])
 	# Phantom: cloaks, a hit reveals it
 	s = self.boss_match(GameSim.PHANTOM)
 	b = s.boss()
@@ -604,8 +603,8 @@ func check_bosses() -> void:
 	self.check(b.act == "cloak" and en[7] == "cloak", "Phantom turns invisible")
 	s.hit(b, 10, v)
 	self.check(b.act == "" and s.boss_look(b) == "shown", "a hit reveals the Phantom")
-	# Ironhide: 30% damage from the front, full from behind or while staggered
-	s = self.boss_match(GameSim.IRONHIDE)
+	# Voltspire (NOX-07): replaces old front-armour passive with active lightning/beam skills
+	s = self.boss_match(GameSim.VOLTSPIRE)
 	b = s.boss()
 	b.face = 0.0
 	v = s.players[2]
@@ -617,12 +616,7 @@ func check_bosses() -> void:
 	hp0 = float(b.hp)
 	s.hit(b, 100, v)
 	var back: float = hp0 - float(b.hp)
-	self.check(absf(front - 30) < 0.01 and absf(back - 100) < 0.01, "Ironhide takes 30%% from the front, full from behind (%.0f / %.0f)" % [front, back])
-	s.boss_act(b, "stagger", 3.0)
-	v.pos = b.pos + Vector2(40, 0)
-	hp0 = float(b.hp)
-	s.hit(b, 100, v)
-	self.check(absf(hp0 - float(b.hp) - 100) < 0.01, "a staggered Ironhide takes full damage from the front")
+	self.check(absf(front - 100) < 0.01 and absf(back - 100) < 0.01, "Voltspire takes full damage from both front and back (%.0f / %.0f)" % [front, back])
 	# FML-09: threat counts the last 5 s only; switching needs 20% more than the current target
 	s = self.new_match()
 	s.nodes.clear()

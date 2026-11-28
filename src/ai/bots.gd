@@ -85,7 +85,7 @@ static func think(sim, p, slot, dt) -> void:
 		else:
 			p.inter = true
 		return
-	if p.hp < BANDAGE_AT * p.maxhp and sim.count(p, "bandage") > 0 and p.channel <= 0 and foe_d > 3.0 * T:
+	if p.hp < BANDAGE_AT * p.maxhp and not SimPlayers.is_poisoned(sim, p) and sim.count(p, "bandage") > 0 and p.channel <= 0 and foe_d > 3.0 * T:
 		sim.action(p.id, "bandage", 0)
 	if p.channel > 0 and foe_d > 1.5 * T:
 		return

@@ -126,6 +126,10 @@ func dev_args(args) -> void:
 			# Open the real post-rescue result screen without playing five nights.
 			main.sim.k = 5
 			SimPhases.end(main.sim, true, "Helicopter landed at pad A")
+		elif a_ == "--lose":
+			# Open the real defeat sequence and post-match result screen without waiting to lose.
+			main.sim.k = 2
+			SimPhases.end(main.sim, false, "Generator destroyed at door A")
 		elif a_ == "--night":
 			# straight to night 1 with no waves, to look at the night colours; an Engineer standing in the base
 			# (--goto before it) stays inside

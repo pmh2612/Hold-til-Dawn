@@ -8,6 +8,53 @@ static var ROLE_HP = [90.0, 100.0, 110.0]
 const REVIVE_KIT_TIME: float = 3.0
 const SLAM_REACTION_TIME: float = 0.7
 const CHARGE_REACTION_TIME: float = 0.55
+const POISON_DURATION: float = 5.0
+const POISON_INTERVAL: float = 2.0
+const POISON_DAMAGE: float = 5.0
+
+static func is_poisoned(sim: GameSim, p) -> bool:
+	return int(p.state) == 0 and float(p.get("poison_until", 0.0)) > float(sim.clock)
+
+static func apply_poison(sim: GameSim, p) -> void:
+	if int(p.state) != 0:
+		return
+	var now: float = float(sim.clock)
+	var active: bool = is_poisoned(sim, p)
+	p.poison_until = now + POISON_DURATION
+	if not active:
+		p.poison_next = now + POISON_INTERVAL
+	if float(p.get("channel", 0.0)) > 0:
+		p.channel = 0.0
+
+static func is_slowed(sim: GameSim, p) -> bool:
+	return int(p.state) == 0 and float(p.get("slow_until", 0.0)) > float(sim.clock)
+
+static func apply_slow(sim: GameSim, p, duration: float) -> void:
+	if int(p.state) != 0:
+		return
+	p.slow_until = maxf(float(p.get("slow_until", 0.0)), float(sim.clock) + duration)
+
+static func clear_poison(p) -> void:
+	p.poison_until = 0.0
+	p.poison_next = 0.0
+	p.slow_until = 0.0
+
+static func tick_poison(sim: GameSim, p) -> void:
+	if not is_poisoned(sim, p):
+		return
+	var now: float = float(sim.clock)
+	while is_poisoned(sim, p) and now >= float(p.get("poison_next", INF)):
+		p.poison_next = float(p.poison_next) + POISON_INTERVAL
+		p.hp -= POISON_DAMAGE
+		p.taken += POISON_DAMAGE
+		if p.hp <= 0:
+			p.hit_kind = ""
+			clear_poison(p)
+			p.hp = 0.0
+			p.state = 1
+			p.bleed = 30.0
+			say(sim, "%s is down" % [p.name])
+			break
 
 static func is_reacting(p) -> bool:
 	return int(p.state) == 0 and p.get("hit_kind", "") != ""
@@ -18,9 +65,9 @@ static func start_hit_reaction(sim: GameSim, p, kind: String, direction: Vector2
 	p.hit_sequence = int(p.get("hit_sequence", 0)) + 1
 	p.hit_kind = kind
 	p.hit_started = float(sim.clock)
-	p.hit_duration = 1.5 if kind == "stun" else 0.5 if kind == "pull" else SLAM_REACTION_TIME if kind == "slam" else CHARGE_REACTION_TIME
+	p.hit_duration = 1.5 if kind == "stun" else SimBossSkills.ROOT_TIME if kind == "root" else SimBossSkills.SHOCK_TIME if kind == "shock" else 0.45 if kind == "launch_short" else SimChainwarden.PULL_TIME if kind == "pull" else SLAM_REACTION_TIME if kind == "slam" else CHARGE_REACTION_TIME
 	p.hit_direction = direction.normalized() if direction.length_squared() > 0.001 else Vector2.RIGHT
-	p.hit_distance = 0.0 if kind in ["stun", "pull"] else 0.6 * T if kind == "slam" else 2.0 * T
+	p.hit_distance = 0.0 if kind in ["stun", "root", "shock", "pull"] else 0.45 * T if kind == "launch_short" else 0.6 * T if kind == "slam" else 2.0 * T
 	p.hit_progress = 0.0
 	p.move_credit = 0.0
 	p.atk = false
@@ -29,11 +76,16 @@ static func start_hit_reaction(sim: GameSim, p, kind: String, direction: Vector2
 	p.swing = 0.0
 	p.activity = "hit"
 
+static func reaction_curve(kind: String, t: float) -> float:
+	# Smooth ease-in-out for chain pulls (avoids an abrupt snap on catch); ease-out for impact knockbacks.
+	if kind == "pull":
+		return t * t * (3.0 - 2.0 * t)
+	return 1.0 - pow(1.0 - t, 2)
+
 static func tick_hit_reaction(sim: GameSim, p) -> void:
 	var progress: float = clampf((float(sim.clock) - float(p.hit_started)) / float(p.hit_duration), 0, 1)
-	# Ease out along the ground. Height is presentation-only; all movement still collides with walls/water.
-	var before: float = 1.0 - pow(1.0 - float(p.hit_progress), 2)
-	var after: float = 1.0 - pow(1.0 - progress, 2)
+	var before: float = reaction_curve(Cs.s(p.hit_kind), float(p.hit_progress))
+	var after: float = reaction_curve(Cs.s(p.hit_kind), progress)
 	var old: Vector2 = p.pos
 	p.pos = SimWorld.move_actor(sim, old, old + Vector2(p.hit_direction) * float(p.hit_distance) * (after - before), 0.4 * T)
 	if not p.inside and sim.phase == "night" and not SimPhases.any_breach(sim):
@@ -177,6 +229,7 @@ static func reset_player(sim: GameSim, p) -> void:
 	p.attack_aim = 0.0
 	p.hit_kind = ""
 	p.hit_sequence = 0
+	clear_poison(p)
 	p.channel = 0.0
 	p.repair_kit_t = 0.0
 	p.tower_build_t = 0.0
@@ -260,6 +313,10 @@ static func tick_players(sim: GameSim, dt) -> void:
 		if p.state != 0:
 			SimConstruction.tick_tower_construction(sim, p, 0)
 			continue
+		tick_poison(sim, p)
+		if p.state != 0:
+			SimConstruction.tick_tower_construction(sim, p, 0)
+			continue
 		if is_reacting(p):
 			tick_hit_reaction(sim, p)
 			continue
@@ -268,8 +325,8 @@ static func tick_players(sim: GameSim, dt) -> void:
 			continue
 		if p.channel > 0:
 			p.activity = "heal"
-			if p.atk:
-				# attacking cancels the bandage and keeps it
+			if p.atk or is_poisoned(sim, p):
+				# attacking or being poisoned cancels the bandage and keeps it
 				p.channel = 0.0
 			else:
 				p.channel -= dt
@@ -447,6 +504,7 @@ static func interact(sim: GameSim, p, dt) -> void:
 				q.state = 0
 				q.hp = 0.3 * q.maxhp
 				q.invuln = 1.0
+				clear_poison(q)
 				p.revives += 1
 				say(sim, "%s revived %s" % [p.name, q.name])
 			return
@@ -463,6 +521,7 @@ static func interact(sim: GameSim, p, dt) -> void:
 					q.state = 0
 					q.hp = q.maxhp * 0.5
 					q.invuln = 1.0
+					clear_poison(q)
 					p.revives += 1
 					say(sim, "%s is back" % [q.name])
 				return
@@ -546,6 +605,7 @@ static func hurt(sim: GameSim, p, dmg) -> void:
 	SimSupplies.cancel_chest_unlock(sim, p)
 	if p.hp <= 0:
 		p.hit_kind = ""
+		clear_poison(p)
 		p.hp = 0.0
 		p.state = 1
 		p.bleed = 30.0

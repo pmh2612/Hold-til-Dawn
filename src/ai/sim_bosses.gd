@@ -4,17 +4,30 @@ extends RefCounted
 # Part of GameSim (game_sim.gd); in the C# version this was src/ai/GameSim.Bosses.cs.
 # Rules only: the match state lives on GameSim, passed in as `sim`.
 # [code, name, HP at night 2 for 4 players on Medium, speed x Grunt] (table 4.2, BAL-39)
-static var BOSS_KINDS = [["NOX-01", "Juggernaut", 3900.0, 1.0], ["NOX-02", "Chainwarden", 4680.0, 0.75], ["NOX-03", "Bio-Cannon", 3510.0, 1.0], ["NOX-04", "Burrower", 3120.0, 1.0], ["NOX-05", "Gatebreaker", 4290.0, 1.0], ["NOX-06", "Phantom", 3120.0, 1.0], ["NOX-07", "Ironhide", 2730.0, 1.0]]
-const TELEGRAPH: float = 1.0  # damaging special moves warn 1.0 s before impact; basic hits use the attack sprite
-const SLAM_WINDUP: float = 1.5
+static var BOSS_KINDS = [["NOX-01", "Juggernaut", 3900.0, 1.0], ["NOX-02", "Chainwarden", 4680.0, 0.75], ["NOX-03", "Bio-Cannon", 3510.0, 1.0], ["NOX-04", "Burrower", 3120.0, 1.0], ["NOX-05", "Earthshaker", 4290.0, 1.0], ["NOX-06", "Phantom", 3120.0, 1.0], ["NOX-07", "Voltspire", 2730.0, 1.0]]
+const TELEGRAPH: float = 1.0  # damaging special moves warn before impact; basic hits use the attack sprite
+const SLAM_WINDUP: float = 0.85
+const CHARGE_WINDUP: float = 0.55
 const SLAM_IMPACT: float = 0.65
 const JUGGERNAUT_SPECIAL_GAP: float = 3.0
 const SIGNATURE_HIT: float = 35.0
+const BURROW_SPEED_MUL: float = 3.2
+const BURROW_ERUPT_DMG: float = 10.0
+const CLOAK_SPEED_MUL: float = 1.6
+const PHANTOM_AMBUSH_WINDUP: float = 0.45
 const MAX_SUMMONS: int = 4
 const BASIC_DAMAGE: float = 12.0
 const BASIC_INTERVAL: float = 1.2
 const STRUCTURE_INTERVAL: float = 2.0
 const HUNT_RADIUS: float = GameSim.SCOUT_NIGHT_SIGHT * 2.0
+const BIO_BARRAGE_COUNT: int = 16
+const BIO_BARRAGE_WINDUP: float = 0.5
+const ACID_POOL_RADIUS: float = 2.2 * GameSim.T
+const ACID_POOL_DURATION: float = 6.0
+const ACID_POOL_IMPACT_DMG: float = 15.0
+const ACID_POOL_TICK_DMG: float = 6.0
+const ACID_POOL_TICK_INTERVAL: float = 1.0
+const ACID_LOB_TIME: float = 0.55
 
 # constants shared with GameSim
 const BIO_CANNON = GameSim.BIO_CANNON
@@ -76,6 +89,11 @@ static func setup_boss(sim: GameSim, e, kind: int) -> void:
 	e.scenery_escape = false
 	e.charge_exit_distance = 0.0
 	e.next_chain_skill = "hook"
+	e.next_bio_skill = "barrage"
+	e.next_burrow_skill = "burrow"
+	e.next_quake_skill = "fissure"
+	e.next_phantom_skill = "cloak"
+	e.next_volt_skill = "lightning"
 	if kind == GameSim.CHAINWARDEN:
 		e.special_cd = 3.0
 	e.exposed_until = 0.0
@@ -85,12 +103,9 @@ static func hittable(sim: GameSim, e) -> bool:
 	# a burrowed boss cannot be hit (Burrower, table 4.2)
 	return not (e.type == BOSS and e.get("act", "") in ["burrow", "surface"])
 
-static func boss_damage_taken(sim: GameSim, e, dmg, from) -> Variant:
-	if e.type != BOSS or int(e.kind) != IRONHIDE or e.get("act", "") == "stagger" or float(e.get("exposed_until", 0.0)) > sim.clock:
-		return dmg
-	# Ironhide: hits from its front 120 degrees deal 30% damage
-	var off: float = absf(angle_difference(float(e.face), (from - e.pos).angle()))
-	return dmg * 0.3 if off <= deg_to_rad(60.0) else dmg
+static func boss_damage_taken(_sim: GameSim, _e, dmg, _from) -> Variant:
+	# NOX-07 Voltspire no longer uses directional front-armour damage reduction.
+	return dmg
 
 static func boss_on_hit(sim: GameSim, e) -> void:
 	# a hit reveals the Phantom
@@ -233,7 +248,7 @@ static func boss_slam(sim: GameSim, e, dt) -> void:
 static func start_slam(sim: GameSim, e) -> void:
 	if int(e.kind) != JUGGERNAUT or e.act != "":
 		return
-	add_telegraph(sim, "circle", e.pos, 3 * T, float(e.slam), {"reaction": "slam", "boss_id": int(e.id), "t": SLAM_WINDUP, "dur": SLAM_WINDUP, "hidden": true})
+	add_telegraph(sim, "circle", e.pos, 3 * T, float(e.slam), {"reaction": "slam", "boss_id": int(e.id), "t": SLAM_WINDUP, "dur": SLAM_WINDUP, "fx_style": "jugg_slam"})
 	e.next_skill = "charge"
 	e.special_cd = INF
 	boss_act(sim, e, "slam", SLAM_WINDUP)
@@ -252,10 +267,10 @@ static func juggernaut_special(sim: GameSim, e) -> bool:
 	e.dash_left = 10.0 * T
 	e.face = dir.angle()
 	e.dash_hit = []
-	add_telegraph(sim, "line", e.pos, 0.75 * T, 0.0, {"end": e.pos + dir * (10.0 * T), "hidden": true})
+	add_telegraph(sim, "line", e.pos, 1.1 * T, 0.0, {"end": e.pos + dir * (10.0 * T), "t": CHARGE_WINDUP, "dur": CHARGE_WINDUP, "fx_style": "jugg_charge"})
 	e.next_skill = "slam"
 	e.special_cd = INF
-	boss_act(sim, e, "charge_wind", TELEGRAPH)
+	boss_act(sim, e, "charge_wind", CHARGE_WINDUP)
 	return true
 
 # Runs the boss's current move; returns true while the boss is busy (it then skips walking and door hits).
@@ -282,6 +297,8 @@ static func tick_boss(sim: GameSim, e, dt) -> bool:
 			return tick_charge(sim, e, dt)
 		if act == "burrow":
 			return tick_burrow(sim, e, dt)
+		if act in ["volt_call", "mirage_dash", "beam_sweep"]:
+			return SimBossSkills.tick_active_act(sim, e, float(dt))
 		if e.act_t > 0:
 			return true
 		finish_act(sim, e, act)
@@ -292,19 +309,28 @@ static func tick_boss(sim: GameSim, e, dt) -> bool:
 		return false
 	var p = boss_target(sim, e)
 	if kind == BIO_CANNON and p != null:
-		boss_act(sim, e, "glow", TELEGRAPH)
+		if e.get("next_bio_skill", "barrage") == "barrage":
+			SimAudio.emit(sim, "boss_acid_charge", e.pos, -int(e.id) - 1)
+			boss_act(sim, e, "glow", BIO_BARRAGE_WINDUP)
+			e.next_bio_skill = "pool"
+		else:
+			var target_pos: Vector2 = IslandMap.pull_inland(Vector2(p.pos), 8.0)
+			e.face = (target_pos - e.pos).angle()
+			e.acid_target = target_pos
+			SimAudio.emit(sim, "boss_acid_lob", e.pos, -int(e.id) - 1)
+			add_telegraph(sim, "circle", target_pos, ACID_POOL_RADIUS, 0.0, {"t": ACID_LOB_TIME, "dur": ACID_LOB_TIME, "acid_from": Vector2(e.pos), "acid_lob": true})
+			boss_act(sim, e, "acid_lob", ACID_LOB_TIME)
+			e.next_bio_skill = "barrage"
 		e.sig_cd = boss_cooldown(sim, 5.0)
 		return true
 	if kind == BURROWER and p != null:
-		e.burrow = p.id
-		boss_act(sim, e, "burrow", 3.0)
-		e.sig_cd = boss_cooldown(sim, 10.0)
-		return true
+		return SimBossSkills.start_burrower_skill(sim, e, p)
+	if kind == GATEBREAKER and p != null:
+		return SimBossSkills.start_earthshaker_skill(sim, e, p)
 	if kind == PHANTOM and p != null:
-		e.burrow = p.id if p != null else 0
-		boss_act(sim, e, "cloak", 4.0)
-		e.sig_cd = boss_cooldown(sim, 12.0)
-		return false
+		return SimBossSkills.start_phantom_skill(sim, e, p)
+	if kind == IRONHIDE and p != null:
+		return SimBossSkills.start_voltspire_skill(sim, e, p)
 	return false
 
 static func finish_act(sim: GameSim, e, act) -> void:
@@ -313,6 +339,7 @@ static func finish_act(sim: GameSim, e, act) -> void:
 	if act == "slam":
 		e.dashed = false
 		if kind == JUGGERNAUT:
+			SimBossSkills.spawn_jugg_slam(sim, Vector2(e.pos))
 			boss_act(sim, e, "slam_impact", SLAM_IMPACT)
 	elif act == "slam_impact":
 		e.special_cd = boss_cooldown(sim, JUGGERNAUT_SPECIAL_GAP)
@@ -320,22 +347,23 @@ static func finish_act(sim: GameSim, e, act) -> void:
 		boss_act(sim, e, "charge", 10.0)
 	elif act == "glow" and kind == BIO_CANNON:
 		SimAudio.emit(sim, "boss_barrage", e.pos, -int(e.id) - 1)
-		# a ring of 8 projectiles with 45-degree gaps: 12 damage, 4 tiles/s, range 8 tiles
-		for i in range(8):
-			var dir: Vector2 = Vector2.from_angle(i * TAU / 8.0)
-			sim.proj.append({"pos": e.pos + dir * e.r, "vel": dir * 4.0 * T, "dmg": boss_damage(sim, 12.0), "ttl": 2.0, "kind": "orb"})
+		SimBossSkills.spawn_bio_barrage(sim, Vector2(e.pos))
+		# A ring of 16 acid orbs (22.5-degree gaps): 12 damage, 4 tiles/s, range 8 tiles, applies poison.
+		for i in range(BIO_BARRAGE_COUNT):
+			var dir: Vector2 = Vector2.from_angle(i * TAU / float(BIO_BARRAGE_COUNT))
+			sim.proj.append({"pos": e.pos + dir * e.r, "vel": dir * 4.0 * T, "dmg": boss_damage(sim, 12.0), "ttl": 2.0, "kind": "orb", "poison": true})
+	elif act == "acid_lob" and kind == BIO_CANNON:
+		spawn_acid_pool(sim, e, Vector2(e.get("acid_target", e.pos)))
 	elif act == "surface":
 		e.pos = e.surface
+		SimBossSkills.spawn_burrow_pop(sim, Vector2(e.pos))
 		SimAudio.emit(sim, "boss_surface", e.pos, -int(e.id) - 1)
 	elif act == "ambush":
 		e.shown = 3.0
-	elif act == "blow":
-		var tw = sim.towers[e.tw] if e.state == 5 else null
-		if tw != null and tw.hp > 0:
-			SimEnemies.damage_tower(sim, e, tw, boss_damage(sim, 120.0))
-		elif e.state != 5:
-			SimEnemies.damage_door(sim, e, boss_damage(sim, 120.0))
-		e.cd = STRUCTURE_INTERVAL
+		SimAudio.emit(sim, "boss_phantom_slash", e.pos, -int(e.id) - 1)
+		SimBossSkills.spawn_phantom_slash(sim, Vector2(e.pos), float(e.face))
+	elif SimBossSkills.finish_skill_act(sim, e, Cs.s(act)):
+		return
 
 static func tick_charge(sim: GameSim, e, dt) -> bool:
 	var old: Vector2 = Vector2(e.pos)
@@ -371,24 +399,40 @@ static func ignores_scenery(e) -> bool:
 static func tick_burrow(sim: GameSim, e, dt) -> bool:
 	var p = boss_target(sim, e)
 	var lost: bool = p == null or p.state != 0
+	var want: Vector2 = Vector2(e.pos)
 	if not lost:
-		# underground it closes in fast and cannot be hit or hit doors
+		# Underground it closes in rapidly right to the exact 1.5-tile emergence ring (no teleport jump on surfacing).
 		var old: Vector2 = Vector2(e.pos)
-		e.pos = SimWorld.move_actor(sim, old, old + (p.pos - old).limit_length(e.spd * 2.0 * dt), e.r)
-	if e.act_t > 0 and not lost and e.pos.distance_to(p.pos) > 2.5 * T:
+		var away: Vector2 = (old - Vector2(p.pos)).normalized() if old.distance_to(p.pos) > 1.0 else Vector2.RIGHT
+		want = Vector2(p.pos) + away * (1.5 * T)
+		var step: Vector2 = (want - old).limit_length(e.spd * BURROW_SPEED_MUL * dt)
+		e.pos = SimWorld.move_actor(sim, old, old + step, e.r)
+		if e.pos.distance_to(old) > 0.5:
+			e.face = (e.pos - old).angle()
+	var reached: bool = lost or e.act_t <= 0 or e.pos.distance_to(want) <= 8.0 or (not lost and e.pos.distance_to(p.pos) <= 1.6 * T)
+	if not reached:
 		return true
-	# surfaces at least 1.5 tiles from its target behind a 1.0 s dirt telegraph of radius 2 tiles
+	# Surface directly at the moving burrow mound so the boss sprite and eruption FX align 1:1.
 	var spot: Vector2 = Vector2(e.pos)
 	if not lost:
-		var away: Vector2 = (e.pos - p.pos).normalized() if e.pos.distance_to(p.pos) > 1.0 else Vector2.RIGHT
-		spot = SimWorld.move_actor(sim, e.pos, p.pos + away * (1.5 * T), e.r)
+		e.face = (Vector2(p.pos) - spot).angle()
 	e.surface = spot
-	add_telegraph(sim, "circle", spot, 2.0 * T, boss_damage(sim, SIGNATURE_HIT))
-	boss_act(sim, e, "surface", TELEGRAPH)
+	boss_act(sim, e, "", 0.0)
+	SimBossSkills.spawn_burrow_pop(sim, spot)
+	SimAudio.emit(sim, "boss_surface", spot, -int(e.id) - 1)
+	var erupt_r: float = 2.2 * T
+	var erupt_dmg: float = boss_damage(sim, BURROW_ERUPT_DMG)
+	for q in sim.players.values():
+		if int(q.state) != 0 or (q.inside and not SimPhases.any_breach(sim)):
+			continue
+		if Vector2(q.pos).distance_to(spot) <= erupt_r:
+			var hp_before: float = float(q.hp)
+			SimPlayers.hurt(sim, q, erupt_dmg)
+			if float(q.hp) < hp_before and int(q.state) == 0:
+				SimPlayers.start_hit_reaction(sim, q, "launch_short", Vector2(q.pos) - spot)
 	return true
 
 static func tick_cloak(sim: GameSim, e, dt) -> bool:
-	e.act_t -= dt
 	var p = boss_target(sim, e)
 	if p == null:
 		# No ambush target remains: immediately return to attacking the nearest structure.
@@ -396,27 +440,25 @@ static func tick_cloak(sim: GameSim, e, dt) -> bool:
 		return false
 	var old: Vector2 = Vector2(e.pos)
 	if old.distance_to(p.pos) > 1.5 * T:
-		e.pos = SimWorld.move_actor(sim, old, old + (SimEnemies.enemy_waypoint(sim, e, p.pos, false) - old).normalized() * e.spd * dt, e.r)
-	if old.distance_to(p.pos) <= 2.0 * T or e.act_t <= 0:
-		# the ambush telegraph reveals it: a 1.0 s arc, then 35 damage in a 1.5-tile arc
-		e.face = (p.pos - e.pos).angle()
-		add_telegraph(sim, "arc", e.pos, e.r + 1.5 * T, boss_damage(sim, SIGNATURE_HIT), {"ang": e.face, "spread": deg_to_rad(120.0)})
-		boss_act(sim, e, "ambush", TELEGRAPH)
+		var way: Vector2 = SimEnemies.enemy_waypoint(sim, e, p.pos, false)
+		e.pos = SimWorld.move_actor(sim, old, old + (way - old).normalized() * e.spd * CLOAK_SPEED_MUL * dt, e.r)
+		if e.pos.distance_to(old) > 0.5:
+			e.face = (e.pos - old).angle()
+	# Only exits cloak once it actually catches up to the player (never times out mid-chase).
+	if e.pos.distance_to(p.pos) <= 2.0 * T:
+		# Halved ambush telegraph delay (0.45 s arc), then 35 damage in a 1.5-tile arc.
+		e.face = (Vector2(p.pos) - Vector2(e.pos)).angle()
+		add_telegraph(sim, "arc", e.pos, e.r + 1.5 * T, boss_damage(sim, SIGNATURE_HIT), {"ang": e.face, "spread": deg_to_rad(120.0), "t": PHANTOM_AMBUSH_WINDUP, "dur": PHANTOM_AMBUSH_WINDUP, "fx_style": "phantom"})
+		boss_act(sim, e, "ambush", PHANTOM_AMBUSH_WINDUP)
 	return true
 
 # Whether this boss hits doors and towers right now (not while burrowed or cloaked).
 static func boss_hits_doors(sim: GameSim, e) -> bool:
 	return not e.get("act", "") in ["burrow", "surface", "cloak"]
 
-# The Gatebreaker's door blow: a 1.0 s wind-up, then 120 damage in one hit, every 8 s.
-static func start_blow(sim: GameSim, e) -> bool:
-	if e.type != BOSS or int(e.kind) != GATEBREAKER or float(e.get("blow_cd", 0.0)) > 0:
-		return false
-	add_telegraph(sim, "circle", e.pos + Vector2.from_angle(float(e.face)) * e.r, 1.0 * T, 0.0)
-	boss_act(sim, e, "blow", TELEGRAPH)
-	e.blow_cd = boss_cooldown(sim, 8.0)
-	e.cd = TELEGRAPH
-	return true
+# NOX-05 Earthshaker uses active seismic skills instead of the old 120-damage door blow.
+static func start_blow(_sim: GameSim, _e) -> bool:
+	return false
 
 # Boss state for the client: "" or the current move (cloak, burrow, glow, stagger, ...).
 static func boss_look(sim: GameSim, e) -> Variant:
@@ -428,3 +470,47 @@ static func boss_look(sim: GameSim, e) -> Variant:
 	if act == "" and e.get("shown", 0.0) > 0:
 		return "shown"
 	return act
+
+static func spawn_acid_pool(sim: GameSim, e, spot: Vector2) -> void:
+	var now: float = float(sim.clock)
+	var impact_dmg: float = boss_damage(sim, ACID_POOL_IMPACT_DMG)
+	var tick_dmg: float = boss_damage(sim, ACID_POOL_TICK_DMG)
+	var next_hit: Dictionary = {}
+	SimAudio.emit(sim, "boss_acid_splash", spot, -int(e.id) - 1)
+	for q in sim.players.values():
+		if int(q.state) != 0 or (q.inside and not SimPhases.any_breach(sim)):
+			continue
+		if Vector2(q.pos).distance_to(spot) <= ACID_POOL_RADIUS and SimWorld.line_clear(sim, spot, q.pos):
+			var hp_before: float = float(q.hp)
+			SimPlayers.hurt(sim, q, impact_dmg)
+			if int(q.state) == 0 and float(q.hp) < hp_before:
+				SimPlayers.apply_poison(sim, q)
+			next_hit[q.id] = now + ACID_POOL_TICK_INTERVAL
+	sim.acid_pools.append({"pos": spot, "r": ACID_POOL_RADIUS, "until": now + ACID_POOL_DURATION, "dur": ACID_POOL_DURATION, "dmg": tick_dmg, "next_hit": next_hit})
+
+static func tick_acid_pools(sim: GameSim) -> void:
+	if sim.acid_pools.is_empty():
+		return
+	var now: float = float(sim.clock)
+	for i in range(sim.acid_pools.size() - 1, -1, -1):
+		var pool = sim.acid_pools[i]
+		if now >= float(pool.until):
+			sim.acid_pools.remove_at(i)
+			continue
+		var spot: Vector2 = Vector2(pool.pos)
+		var r: float = float(pool.r)
+		for q in sim.players.values():
+			if int(q.state) != 0 or (q.inside and not SimPhases.any_breach(sim)):
+				continue
+			if Vector2(q.pos).distance_to(spot) <= r and SimWorld.line_clear(sim, spot, q.pos):
+				SimPlayers.apply_poison(sim, q)
+				if now >= float(pool.next_hit.get(q.id, 0.0)):
+					pool.next_hit[q.id] = now + ACID_POOL_TICK_INTERVAL
+					SimPlayers.hurt(sim, q, float(pool.dmg))
+
+static func acid_pools_snapshot(sim: GameSim) -> Array:
+	var out: Array = []
+	var now: float = float(sim.clock)
+	for pool in sim.acid_pools:
+		out.append([Vector2(pool.pos), float(pool.r), maxf(0.0, float(pool.until) - now), float(pool.dur)])
+	return out

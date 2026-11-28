@@ -41,6 +41,8 @@ var arrows = []
 # seconds since the match started; FML-09 threat windows are measured with it
 var clock = 0.0
 var tele = []
+var acid_pools = []
+var boss_fx = []
 var nodes = []
 var drops = []
 var votes = {}
@@ -82,9 +84,11 @@ const CHAINWARDEN: int = 1
 const BROODMOTHER: int = CHAINWARDEN # legacy ID for saved tools/atlas names
 const BIO_CANNON: int = 2
 const BURROWER: int = 3
-const GATEBREAKER: int = 4
+const EARTHSHAKER: int = 4
+const GATEBREAKER: int = EARTHSHAKER # legacy ID for saved tests / sprites
 const PHANTOM: int = 5
-const IRONHIDE: int = 6
+const VOLTSPIRE: int = 6
+const IRONHIDE: int = VOLTSPIRE # legacy ID for saved tests / sprites
 # The bosses of nights 2 and 4, drawn when the match starts and announced at dawn of that day (FML-05).
 var boss_plan = [0, 1]
 
@@ -99,7 +103,7 @@ const GRUNT: int = 0
 const SPITTER: int = 1
 const WRECKER: int = 2
 const BOSS: int = 3
-static var ENEMY = [[40.0, 4.0, 2.0, 8, 1], [28.0, 4.0, 2.0, 12, 3], [70.0, 5.0, 1.6, 16, 4]]  # hp, damage per faster basic hit, speed tiles/s, cost, first night
+static var ENEMY = [[40.0, 4.0, 2.0, 8, 1], [28.0, 4.0, 2.0, 12, 2], [70.0, 5.0, 1.6, 16, 3]]  # hp, damage per faster basic hit, speed tiles/s, cost, first night
 
 var enemy_batch = []
 var audio_sequence: int = 0
@@ -366,7 +370,9 @@ func action(id, kind, arg) -> void:
 		if phase == "result":
 			SimPhases.to_lobby(self)
 	elif kind == "bandage":
-		if p.state == 0 and SimInventory.count(self, p, "bandage") > 0 and p.hp < p.maxhp and p.channel <= 0:
+		if p.state == 0 and SimPlayers.is_poisoned(self, p):
+			SimPlayers.note(self, p, "Poisoned: cannot heal")
+		elif p.state == 0 and SimInventory.count(self, p, "bandage") > 0 and p.hp < p.maxhp and p.channel <= 0:
 			p.channel = 2.0
 	elif kind == "select":
 		p.sel = clampi(int(arg), 0, HOTBAR - 1)
@@ -421,6 +427,8 @@ func start_match() -> Variant:
 	arrows.clear()
 	SimTacticalItems.reset_tactical_items(self)
 	tele.clear()
+	acid_pools.clear()
+	boss_fx.clear()
 	drops.clear()
 	storage = SimInventory.empty_slots(STORAGE_SLOTS)
 	built_walls = []
@@ -462,6 +470,8 @@ func tick(dt) -> void:
 	SimEnemies.tick_proj(self, dt)
 	SimPlayers.tick_arrows(self, dt)
 	SimEnemies.tick_tele(self, dt)
+	SimBosses.tick_acid_pools(self)
+	SimBossSkills.tick_boss_fx(self, float(dt))
 	SimDrops.tick_drops(self, dt)
 	if phase == "night":
 		SimPhases.tick_breach_end(self, dt)
@@ -497,12 +507,28 @@ func snapshot_hit_reactions() -> Dictionary:
 			reactions[id] = [int(p.hit_sequence), Cs.s(p.hit_kind), maxf(0, clock - float(p.hit_started)), float(p.hit_duration), Vector2(p.hit_direction)]
 	return reactions
 
+func snapshot_poisoned() -> Dictionary:
+	var out: Dictionary = {}
+	for id in players:
+		var p = players[id]
+		if SimPlayers.is_poisoned(self, p):
+			out[id] = maxf(0.0, float(p.poison_until) - float(clock))
+	return out
+
+func snapshot_slowed() -> Dictionary:
+	var out: Dictionary = {}
+	for id in players:
+		var p = players[id]
+		if SimPlayers.is_slowed(self, p):
+			out[id] = maxf(0.0, float(p.slow_until) - float(clock))
+	return out
+
 func snapshot() -> Variant:
 	var ps = {}
 	for id in players:
 		var p = players[id]
 		ps[id] = [p.name, p.role, p.pos, p.hp, p.maxhp, p.state, p.bleed, p.inv, p.weapon, p.armour, 0, p.swing > 0, p.aim, p.channel, p.revive_p, p.tp, p.note if p.note_t > 0 else "", p.kills, p.dmg, p.inside, p.entry, p.gather_acc, p.activity, p.activity_target, p.input_sequence, p.sel, p.craft_idx, p.craft_t / SimPlayers.player_craft_duration(self, p, int(p.craft_idx)) if p.craft_idx >= 0 else 0.0, p.revives, p.taken, p.get("haste_until", 0.0) > clock, p.get("repair_kit_t", 0.0), p.open_chest, p.unlock_chest, float(p.unlock_t) / CHEST_UNLOCK_TIME, p.chest_use_seq]
-	return {"audio": audio_events.duplicate(), "ph": phase, "t": t, "k": k, "base": base_hp, "doors": doors, "active": active, "ps": ps, "attack_pose": snapshot_attack_poses(), "hit_reactions": snapshot_hit_reactions(), "en": enemies.map(func(e): return [e.id, e.type, e.pos, e.hp, e.maxhp, e.r, e.get("kind", -1), SimBosses.boss_look(self, e), e.get("face", 0.0), e.get("swing", 0.0) > 0, e.get("stun_until", 0.0) > clock, e.get("slow_until", 0.0) > clock, float(e.get("act_t", 0.0)), clock - float(e.get("slam_at", -99.0))]), "chains": SimChainwarden.snapshot(self), "proj": proj.map(func(b): return [b.pos, b.get("kind", "spit")]), "tele": tele.filter(func(tl): return not tl.get("hidden", false)).map(func(tl): return [tl.pos, tl.r, tl.t / tl.dur, tl.kind, tl.end, tl.ang, tl.spread]), "nodes": snapshot_nodes(), "drops": drops.map(func(d): return [d.pos, d.item, d.n, d.ttl]), "msg": msg if msg_t > 0 or phase == "result" else "", "unlock": unlock, "votes": votes.size(), "need": ceili(0.6 * self.humans()), "leader": self.leader(), "mode": mode, "ext": ext, "pads": pad_clear, "broken": broken, "dpause": door_pause.map(func(v): return v > 0), "inside_en": SimPhases.enemy_inside(self), "tw": towers.filter(func(tw): return tw != null).map(func(tw): return [tw.slot, tw.pos, tw.hp, tw.wrecked, tw.target != null, tw.target if tw.target != null else Vector2.ZERO]), "free_tower": free_tower, "nq": [SimNightSpawns.night_killed(self), night_quota], "sup": SimSupplies.supply_snapshot(self), "chests": SimSupplies.chest_contents_snapshot(self), "rescue": SimSupplies.rescue_snapshot(self), "construction": SimConstruction.construction_snapshot(self), "boss_next": SimBosses.boss_kind_for(self, k) if k == 2 or k == 4 else -1, "sto": storage, "walls": built_walls.map(func(w): return [w.pos, w.vert, w.hp, w.maxhp, w.kind]), "result": result, "tactical": SimTacticalItems.tactical_snapshot(self), "arrows": arrows.map(func(a): return [a.pos, a.vel.angle(), a.get("explosive", false)])}
+	return {"audio": audio_events.duplicate(), "ph": phase, "t": t, "k": k, "base": base_hp, "doors": doors, "active": active, "ps": ps, "attack_pose": snapshot_attack_poses(), "hit_reactions": snapshot_hit_reactions(), "poisoned": snapshot_poisoned(), "slowed": snapshot_slowed(), "en": enemies.map(func(e): return [e.id, e.type, e.pos, e.hp, e.maxhp, e.r, e.get("kind", -1), SimBosses.boss_look(self, e), e.get("face", 0.0), e.get("swing", 0.0) > 0, e.get("stun_until", 0.0) > clock, e.get("slow_until", 0.0) > clock, float(e.get("act_t", 0.0)), clock - float(e.get("slam_at", -99.0))]), "chains": SimChainwarden.snapshot(self), "proj": proj.map(func(b): return [b.pos, b.get("kind", "spit"), Vector2(b.vel).angle()]), "tele": tele.filter(func(tl): return not tl.get("hidden", false)).map(func(tl): return [tl.pos, tl.r, tl.t / tl.dur, tl.kind, tl.end, tl.ang, tl.spread, tl.get("acid_from", null), tl.get("fx_style", ""), tl.get("ring_inner", 0.0)]), "acid_pools": SimBosses.acid_pools_snapshot(self), "boss_fx": SimBossSkills.snapshot(self), "nodes": snapshot_nodes(), "drops": drops.map(func(d): return [d.pos, d.item, d.n, d.ttl]), "msg": msg if msg_t > 0 or phase == "result" else "", "unlock": unlock, "votes": votes.size(), "need": ceili(0.6 * self.humans()), "leader": self.leader(), "mode": mode, "ext": ext, "pads": pad_clear, "broken": broken, "dpause": door_pause.map(func(v): return v > 0), "inside_en": SimPhases.enemy_inside(self), "tw": towers.filter(func(tw): return tw != null).map(func(tw): return [tw.slot, tw.pos, tw.hp, tw.wrecked, tw.target != null, tw.target if tw.target != null else Vector2.ZERO]), "free_tower": free_tower, "nq": [SimNightSpawns.night_killed(self), night_quota], "sup": SimSupplies.supply_snapshot(self), "chests": SimSupplies.chest_contents_snapshot(self), "rescue": SimSupplies.rescue_snapshot(self), "construction": SimConstruction.construction_snapshot(self), "boss_next": SimBosses.boss_kind_for(self, k) if k == 2 or k == 4 else -1, "sto": storage, "walls": built_walls.map(func(w): return [w.pos, w.vert, w.hp, w.maxhp, w.kind]), "result": result, "tactical": SimTacticalItems.tactical_snapshot(self), "arrows": arrows.map(func(a): return [a.pos, a.vel.angle(), a.get("explosive", false)])}
 
 func tick_bots(dt: float) -> void:
 	bot_step_accumulator += dt

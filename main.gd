@@ -47,6 +47,11 @@ var sim
 var snap = {}
 var my_id = 0
 var local_pos = Vector2.ZERO
+var local_sim_prev = Vector2.ZERO
+var local_sim_curr = Vector2.ZERO
+var local_sim_valid: bool = false
+var react_prev = {}
+var react_curr = {}
 var local_tp = -1
 var send_acc = 0.0
 var input_sequence = 0
@@ -109,6 +114,7 @@ var banner = Label.new()
 var front = Control.new()
 # The client is split into parts, one file per owner; each part reaches back through `main`.
 var enemy_view := EnemyView.new(self)
+var boss_fx_view := BossFxView.new(self)
 var anim := AnimView.new(self)
 var tactical_items := TacticalItemsView.new(self)
 var base_arrow := BaseArrowView.new(self)
@@ -204,7 +210,26 @@ func _physics_process(delta: float) -> void:
 	var dt = delta
 	# a solo match stops while the pause overlay is open
 	if sim and not pause_menu.paused:
+		var prev_map := {}
+		for id in sim.players:
+			prev_map[id] = Vector2(sim.players[id].pos)
+		if my_id != 0 and sim.players.has(my_id):
+			local_sim_prev = prev_map[my_id]
 		sim.tick(dt)
+		react_prev.clear()
+		react_curr.clear()
+		for id in sim.players:
+			var sp = sim.players[id]
+			if SimPlayers.is_reacting(sp):
+				react_prev[id] = prev_map.get(id, Vector2(sp.pos))
+				react_curr[id] = Vector2(sp.pos)
+		if my_id != 0 and sim.players.has(my_id):
+			local_sim_curr = Vector2(sim.players[my_id].pos)
+			if not local_sim_valid:
+				local_sim_prev = local_sim_curr
+			local_sim_valid = true
+		else:
+			local_sim_valid = false
 		frame += 1
 		# the renderer reads a snapshot 20 times per second, as a client would
 		if frame % 3 == 0:
@@ -217,16 +242,27 @@ func move(dt) -> void:
 	if me[15] != local_tp:
 		local_tp = me[15]
 		local_pos = me[2]
+		local_sim_prev = Vector2(me[2])
+		local_sim_curr = Vector2(me[2])
 		pending_inputs.clear()
 	var playing: bool = snap.ph in ["day", "dusk", "night"]
-	var reacting: bool = me[5] == 0 and snap.get("hit_reactions", {}).has(my_id)
+	var sim_me = sim.players.get(my_id) if sim != null else null
+	var sim_reacting: bool = sim_me != null and SimPlayers.is_reacting(sim_me)
+	var reacting: bool = me[5] == 0 and (snap.get("hit_reactions", {}).has(my_id) or sim_reacting)
 	var local_before: Vector2 = Vector2(local_pos)
 	if reacting:
-		local_pos = sim.players[my_id].pos if sim != null and sim.players.has(my_id) else me[2]
+		if sim_me != null:
+			if local_sim_valid and local_sim_prev.distance_to(local_sim_curr) < 4.0 * T:
+				local_pos = local_sim_prev.lerp(local_sim_curr, Engine.get_physics_interpolation_fraction())
+			else:
+				local_pos = Vector2(sim_me.pos)
+		else:
+			local_pos = Vector2(local_pos).lerp(Vector2(me[2]), minf(1.0, dt * 20.0))
 		pending_inputs.clear()
 	elif playing and me[5] == 0:
 		var dir = Vector2(self.key(68) - self.key(65), self.key(83) - self.key(87))
-		var destination = local_pos + dir.normalized() * GameSim.SPEED * (1.2 if me[1] == 0 else 1.0) * (1.2 if me.size() > 30 and me[30] else 1.0) * dt
+		var slow_mul: float = 0.7 if snap.get("slowed", {}).has(my_id) else 1.0
+		var destination = local_pos + dir.normalized() * GameSim.SPEED * (1.2 if me[1] == 0 else 1.0) * (1.2 if me.size() > 30 and me[30] else 1.0) * slow_mul * dt
 		local_pos = geometry.move_body(local_pos, destination, BODY_R, SimWorld.walls(self.doors_open()))
 		local_pos = self.bump(local_pos, BODY_R)
 	local_pos = IslandMap.keep(local_before, Vector2(local_pos), float(BODY_R))
@@ -317,10 +353,13 @@ func on_snap(d) -> void:
 			var p = d.ps[id]
 			var old = prev_php.get(id)
 			if old != null and p[3] < old:
-				self.popup(p[2] - Vector2(0, LIFT), "-%d" % [roundi(old - p[3])], NEON_RED, 15)
+				var loss: float = float(old - p[3])
+				var is_poison_tick: bool = d.get("poisoned", {}).has(id) and is_equal_approx(loss, SimPlayers.POISON_DAMAGE)
+				self.popup(p[2] - Vector2(0, LIFT), "-%d" % [roundi(loss)], Color("7BF058") if is_poison_tick else NEON_RED, 15)
 				if id == my_id:
-					shake = maxf(shake, 7.0)
-					hurt = 0.35
+					shake = maxf(shake, 2.5 if is_poison_tick else 7.0)
+					if not is_poison_tick:
+						hurt = 0.35
 	var mine = d.get("ps", {}).get(my_id)
 	var old_me = snap.get("ps", {}).get(my_id)
 	if mine != null and old_me != null:
@@ -339,7 +378,8 @@ func on_snap(d) -> void:
 		prev_php[id] = d.ps[id][3]
 	geometry.rebuild(harvest_view.node_colliders(d.get("nodes", [])), d.get("tw", []).map(func(tw): return {"pos": tw[1]}), d.get("walls", []).map(func(w): return {"pos": w[0], "vert": w[1]}))
 	if mine != null and (d.get("hit_reactions", {}).has(my_id) or snap.get("hit_reactions", {}).has(my_id)):
-		local_pos = mine[2]
+		if sim == null or not local_sim_valid:
+			local_pos = mine[2]
 		pending_inputs.clear()
 	elif mine != null and mine[15] == local_tp and mine.size() > 24:
 		var acknowledged: int = int(mine[24])
@@ -419,7 +459,10 @@ func _process(delta: float) -> void:
 	enemy_view.note_fallen(ne)
 	shown_e = ne
 	for id in snap.ps:
-		shown_p[id] = shown_p.get(id, snap.ps[id][2]).lerp(snap.ps[id][2], a_)
+		if sim != null and react_curr.has(id) and Vector2(react_prev.get(id, react_curr[id])).distance_to(react_curr[id]) < 4.0 * T:
+			shown_p[id] = Vector2(react_prev.get(id, react_curr[id])).lerp(react_curr[id], Engine.get_physics_interpolation_fraction())
+		else:
+			shown_p[id] = shown_p.get(id, snap.ps[id][2]).lerp(snap.ps[id][2], a_)
 	for id in flash.keys():
 		flash[id] -= dt
 		if flash[id] <= 0:
@@ -554,8 +597,9 @@ func _draw() -> void:
 	# base floor: stone paving (src/world/view/base_look.gd)
 	draw_rect(Rect2(-h, h * 2), Color("4F4B42"))
 	base_look.draw_base_floor()
+	enemy_view.draw_acid_pools()
 	enemy_view.draw_telegraphs()
-	enemy_view.draw_chains()
+	boss_fx_view.draw_ground_fx()
 	tactical_items.draw_tactical_areas()
 	survival_feedback.draw_construction_ground()
 	# from outside, the inside of the base is fogged over (src/world/view/base_fog.gd)
@@ -661,12 +705,28 @@ func _draw() -> void:
 		elif kind == 3:
 			player_view.draw_player(it[2], it[3], it[4])
 		elif kind == 4:
-			# enemy projectile: Spitter spit or Bio-Cannon spore (art/fx)
+			# enemy projectile: Spitter spit or Bio-Cannon acid glob (art/fx)
 			var b = it[2]
 			var bp: Vector2 = Vector2(b[0])
-			self.shadow(bp + Vector2(0, -4), 5)
-			draw_circle(bp - Vector2(0, LIFT), 8, Color(0.5, 2.0, 0.6, 0.3) if b[1] == "orb" else Color(1.6, 1.9, 0.4, 0.35))
-			inventory.draw_fx(b[1], bp - Vector2(0, LIFT), 0.0)
+			var lift_pos: Vector2 = bp - Vector2(0, LIFT)
+			self.shadow(bp + Vector2(0, -4), 4.5)
+			if b[1] == "orb":
+				var ang: float = float(b[2]) if b.size() > 2 else 0.0
+				var back_dir: Vector2 = -Vector2.from_angle(ang)
+				var side_dir: Vector2 = back_dir.orthogonal()
+				var wobble: float = sin(tnow * 16.0 + bp.x * 0.07 + bp.y * 0.07)
+				var night_boost: float = 1.0 + night_level * 0.55
+				var orb_mod: Color = Color(0.75 + night_level * 0.15, 0.95 * night_boost, 0.62 + night_level * 0.1)
+				# Organic readable green trailing acid droplets (no flat round halo).
+				for di in range(3):
+					var drop_pos: Vector2 = lift_pos + back_dir * (8.5 + di * 5.0) + side_dir * (wobble * (1.8 + di * 1.0) * (1.0 if di % 2 == 0 else -1.0))
+					var sz: float = 3.5 - di * 0.8
+					var drop_col: Color = Color(0.42, 1.05 + night_level * 0.35, 0.28, 0.78 - di * 0.2)
+					draw_rect(Rect2((drop_pos - Vector2.ONE * (sz * 0.5)).round(), Vector2(sz, sz)), drop_col)
+				inventory.draw_fx("orb", lift_pos, ang + wobble * 0.1, 1.3, orb_mod)
+			else:
+				draw_circle(lift_pos, 6, Color(1.6, 1.9, 0.4, 0.28))
+				inventory.draw_fx(b[1], lift_pos, 0.0)
 		elif kind == 5:
 			var d = it[2]
 			if d[3] >= 0.0 and d[3] < 5.0 and fmod(tnow, 0.3) < 0.12:
@@ -699,6 +759,9 @@ func _draw() -> void:
 			for k in 5:
 				var c = g.position + Vector2(fmod(k * 13.7, g.size.x), fmod(k * 29.3, g.size.y))
 				self.box(Rect2(c - Vector2(5, 4), Vector2(10, 8)), 5.0, Color("4A2226"))
+	enemy_view.draw_chainwarden_sweeps()
+	enemy_view.draw_chains()
+	boss_fx_view.draw_air_fx()
 	# chips flying off nodes being gathered
 	node_break.draw_chips()
 	node_break.draw_harvest_feedback()

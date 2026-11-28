@@ -310,8 +310,12 @@ func draw_landmark_dots(ci, inside: Rect2, to, big: bool) -> void:
 		ci.draw_string_outline(f, base, name, HORIZONTAL_ALIGNMENT_LEFT, -1, size, 1, Color.BLACK)
 		ci.draw_string(f, base, name, HORIZONTAL_ALIGNMENT_LEFT, -1, size, Color.BLACK)
 
-# the name of the landmark you just walked into, for a few seconds under the radio line
+# the name of the landmark you just walked into, for a few seconds under the radio line (hidden at night)
 func draw_here_name(c, vs) -> void:
+	if main.snap.get("ph", "") in ["night", "result"]:
+		here_now = null
+		here_since = -99.0
+		return
 	var here = main.geometry.near_landmark(Vector2(main.local_pos), 8.0 * IslandMap.SCALE * float(T))
 	var now: float = float(main.clock)
 	if here != here_now:
@@ -324,6 +328,5 @@ func draw_here_name(c, vs) -> void:
 	if age > 4.0:
 		return
 	var a_: float = clampf(age / 0.3, 0, 1) * clampf((4.0 - age) / 0.8, 0, 1)
-	# under the radio line, which sits lower at night (the night bar)
-	var y: float = 116 + EnemyView.NIGHT_BAR_H if main.snap.get("ph", "") == "night" else 142
+	var y: float = 142.0
 	main.text(c, Vector2(0, y), here_now.name.to_upper(), 15, Color(Color.BLACK, a_), 1, vs.x, true)

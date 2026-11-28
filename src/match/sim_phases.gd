@@ -18,6 +18,8 @@ static func dawn(sim: GameSim) -> void:
 	SimNightSpawns.reset_night_spawns(sim)
 	SimTacticalItems.reset_tactical_items(sim)
 	SimConstruction.cancel_all_construction(sim)
+	sim.acid_pools.clear()
+	sim.boss_fx.clear()
 	sim.phase = "day"
 	sim.t = DAY_MAX
 	sim.votes.clear()
@@ -84,6 +86,8 @@ static func night_cleared(sim: GameSim) -> void:
 	sim.enemies.clear()
 	sim.proj.clear()
 	sim.tele.clear()
+	sim.acid_pools.clear()
+	sim.boss_fx.clear()
 	sim.k += 1
 	dawn(sim)
 
@@ -100,6 +104,8 @@ static func end(sim: GameSim, win, why) -> void:
 	sim.enemies.clear()
 	sim.proj.clear()
 	sim.tele.clear()
+	sim.acid_pools.clear()
+	sim.boss_fx.clear()
 
 static func to_lobby(sim: GameSim) -> void:
 	SimConstruction.cancel_all_construction(sim)
@@ -113,6 +119,8 @@ static func to_lobby(sim: GameSim) -> void:
 	sim.enemies.clear()
 	sim.proj.clear()
 	sim.tele.clear()
+	sim.acid_pools.clear()
+	sim.boss_fx.clear()
 	for p in sim.players.values():
 		SimPlayers.reset_player(sim, p)
 

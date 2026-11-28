@@ -33,7 +33,7 @@ static func vest(plates: bool, rivets: bool) -> Variant:
 		rows[6] = "..LxLLLLLLLLxl.."
 	return Array(rows).duplicate()
 # Projectiles and effects drawn in the world.
-static var fx = {"arrow": [["F..........I.", "fhhhhhhhhhhiI", "F..........I."], {"h": "C08A50", "i": "D5DAE1", "I": "8FA3B8", "F": "D9534A", "f": "E8E3C8"}], "spit": [["..qQQ.", ".QQqQQ", "QQQQQj", ".QQQjj", "..jj.."], {"Q": "D8E03A", "q": "F6F9A8", "j": "8F9620"}], "orb": [["..pPPp..", ".pPWWPp.", "pPWWPPPp", "pPWPPPPp", "pPPPPPpk", ".pPPPpk.", "..kkkk.."], {"P": "7BE36A", "p": "3FA54E", "W": "E8FFD8", "k": "1F6B33"}]}
+static var fx = {"arrow": [["F..........I.", "fhhhhhhhhhhiI", "F..........I."], {"h": "C08A50", "i": "D5DAE1", "I": "8FA3B8", "F": "D9534A", "f": "E8E3C8"}], "spit": [["..qQQ.", ".QQqQQ", "QQQQQj", ".QQQjj", "..jj.."], {"Q": "D8E03A", "q": "F6F9A8", "j": "8F9620"}], "orb": [["........pPPP......", "......pPWWWWPp....", "..p..pPWWWWWPPp...", "pPP..PWWWWPPPPPk..", ".pPPpPWWPPPPPPPk..", "...pPPPPPPPPPPk...", "....pPPPPPPPpk....", "......pPPPpk......", "........kk........"], {"P": "76FF48", "p": "3BE03B", "W": "F4FFDC", "k": "1E9C2E"}]}
 
 func _ready() -> void:
 	add_tactical_art()
@@ -49,15 +49,15 @@ func _ready() -> void:
 	for name in fx:
 		var art = fx[name]
 		var w: int = art[0].map(func(r): return r.length()).max() + 2
-		save(draw(art[0], art[1], w, art[0].size() + 2), out.path_join("fx").path_join(name + ".png"))
+		save(draw(art[0], art[1], w, art[0].size() + 2, name != "orb"), out.path_join("fx").path_join(name + ".png"))
 	get_tree().quit()
 
 static func save(im, path) -> void:
 	im.save_png(path)
 	print("drew ", path, " ", im.get_size())
 
-# Centres the pixel map on a W x H canvas and adds the dark outline.
-static func draw(rows, pal_, w: int, h: int) -> Variant:
+# Centres the pixel map on a W x H canvas and optionally adds the dark outline.
+static func draw(rows, pal_, w: int, h: int, outlined: bool = true) -> Variant:
 	var im = Image.create_empty(w, h, false, Image.FORMAT_RGBA8)
 	var wide: int = rows.map(func(r): return r.length()).max()
 	var x0: int = (w - wide) / 2
@@ -72,6 +72,8 @@ static func draw(rows, pal_, w: int, h: int) -> Variant:
 				push_error("no colour for '%s'" % [Cs.s(k)])
 				continue
 			im.set_pixel(x0 + x, y0 + y, Color(hex))
+	if not outlined:
+		return im
 	var src = im.duplicate()
 	for y in range(h):
 		for x in range(w):

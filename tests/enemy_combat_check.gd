@@ -41,6 +41,8 @@ func _ready() -> void:
 	check_charge_obstacles()
 	check_charge_escape()
 	check_chainwarden()
+	check_bio_cannon()
+	check_remaining_bosses()
 	print(("ENEMY COMBAT FAILED" if failed else "ENEMY COMBAT ALL OK") + ": %d checks" % checks)
 	get_tree().quit(1 if failed else 0)
 
@@ -48,6 +50,8 @@ func reset(type: int, kind: int = 0) -> Variant:
 	sim.enemies.clear()
 	sim.proj.clear()
 	sim.tele.clear()
+	sim.acid_pools.clear()
+	sim.boss_fx.clear()
 	sim.clock = 0
 	sim.k = 1
 	sim.doors = [GameSim.DOOR_HP, GameSim.DOOR_HP, GameSim.DOOR_HP]
@@ -155,28 +159,34 @@ func check_safety() -> void:
 	check(not SimWorld.line_clear(sim, e.pos, p.pos) and not SimEnemies.melee_attack(sim, e, p), "ordinary boss attacks cannot pass through solid walls")
 
 func check_structure_damage() -> void:
-	var e = reset(GameSim.BOSS, GameSim.IRONHIDE)
+	var e = reset(GameSim.BOSS, GameSim.VOLTSPIRE)
+	e.sig_cd = INF
 	sim.players[1].pos = field + Vector2(0, 10 * GameSim.T)
 	e.pos = GameSim.DOOR_POS[0] + GameSim.DOOR_DIR[0] * (e.r + 6)
 	sim.doors[0] = GameSim.DOOR_HP
 	step(4.0)
 	check(is_equal_approx(GameSim.DOOR_HP - float(sim.doors[0]), 60.0), "ordinary boss structure hits are 30 damage every two seconds, preserving long-term damage")
-	e = reset(GameSim.BOSS, GameSim.GATEBREAKER)
+	e = reset(GameSim.BOSS, GameSim.EARTHSHAKER)
+	e.sig_cd = INF
 	e.pos = GameSim.DOOR_POS[0] + GameSim.DOOR_DIR[0] * (e.r + 6)
 	sim.players[1].pos = field + Vector2(0, 10 * GameSim.T)
 	sim.doors[0] = GameSim.DOOR_HP
-	step(0.5)
-	check(sim.doors[0] == GameSim.DOOR_HP and e.act == "blow", "Gatebreaker's signature still waits for its warning")
-	step(0.7)
-	check(is_equal_approx(GameSim.DOOR_HP - float(sim.doors[0]), 120.0), "Gatebreaker's signature still deals 120 damage after the warning")
+	step(4.0)
+	check(is_equal_approx(GameSim.DOOR_HP - float(sim.doors[0]), 60.0) and e.act == "", "Earthshaker deals normal 30-damage structure hits without the removed 120-damage door blow")
+	e = reset(GameSim.WRECKER)
+	e.pos = GameSim.DOOR_POS[0] + GameSim.DOOR_DIR[0] * (e.r + 6)
+	sim.players[1].pos = field + Vector2(0, 10 * GameSim.T)
+	sim.doors[0] = GameSim.DOOR_HP
 	step(2.0)
-	check(is_equal_approx(GameSim.DOOR_HP - float(sim.doors[0]), 150.0) and e.blow_cd > 0, "Gatebreaker uses ordinary structure attacks between special blows instead of idling for eight seconds")
+	check(is_equal_approx(GameSim.DOOR_HP - float(sim.doors[0]), 20.0), "Wrecker deals double structure damage (10 per hit every 1.25s) using the same door/player AI path as Grunt")
 
 func check_real_tick_cadence() -> void:
 	# The player's immunity runs at 60 Hz while enemies run at 20 Hz. A cooldown must not waste
 	# every other strike on the final fraction of a one-second immunity window.
 	for type in [GameSim.GRUNT, GameSim.WRECKER, GameSim.BOSS]:
-		reset(type, GameSim.IRONHIDE)
+		var e = reset(type, GameSim.VOLTSPIRE)
+		if type == GameSim.BOSS:
+			e.sig_cd = INF
 		sim.t = 1000
 		sim.elapsed = 0
 		sim.next_wave = INF
@@ -308,13 +318,13 @@ func check_juggernaut_skills() -> void:
 	var p = sim.players[1]
 	e.cd = INF
 	SimBosses.start_slam(sim, e)
-	check(sim.snapshot().tele.is_empty() and sim.tele.size() == 1, "Juggernaut's slam warning is hidden from every client without removing its damage timer")
+	check(sim.snapshot().tele.size() == 1 and sim.snapshot().tele[0][3] == "circle" and sim.snapshot().tele[0][8] == "jugg_slam", "Juggernaut's slam range indicator is visible to clients with the jugg_slam style")
 	var before: float = p.hp
-	for i in range(29):
+	for i in range(16):
 		sim.clock += 0.05
 		sim.tick_enemies(0.05)
 		SimEnemies.tick_tele(sim, 0.05)
-	check(p.hp == before and e.act == "slam", "Juggernaut gives the full 1.5-second warning before its slam damages anyone")
+	check(p.hp == before and e.act == "slam", "Juggernaut gives the full 0.85-second warning before its slam damages anyone")
 	for i in range(2):
 		sim.clock += 0.05
 		sim.tick_enemies(0.05)
@@ -328,10 +338,10 @@ func check_juggernaut_skills() -> void:
 	e.special_cd = 0.0
 	step(0.05)
 	check(e.act == "charge_wind" and sim.tele[0].kind == "line" and EnemyView.boss_skill_animation(sim.snapshot().en[0])[0] == "charge_wind", "Juggernaut prepares its dash with a line warning and crouching animation")
-	check(sim.snapshot().tele.is_empty(), "Juggernaut's charge no longer displays the red line warning")
+	check(sim.snapshot().tele.size() == 1 and sim.snapshot().tele[0][3] == "line" and sim.snapshot().tele[0][8] == "jugg_charge", "Juggernaut's charge displays its animated lane range indicator")
 	SimBosses.add_telegraph(sim, "arc", field, GameSim.T, 0.0)
-	check(sim.snapshot().tele.size() == 1 and sim.snapshot().tele[0][3] == "arc", "Other bosses' ground warnings remain visible")
-	step(1.0)
+	check(sim.snapshot().tele.size() == 2 and sim.snapshot().tele[1][3] == "arc", "Other bosses' ground warnings remain visible")
+	step(0.6)
 	check(e.act == "charge" and EnemyView.boss_skill_animation(sim.snapshot().en[0])[0] == "charge_run", "Dash uses its own looping full-body animation instead of the normal walk cycle")
 	step(1.3)
 	check(e.act == "" and e.special_cd > 0 and not sim.tele.any(func(tl): return tl.kind == "circle"), "The dash ends without an automatic slam and starts the shared special cooldown")
@@ -381,7 +391,7 @@ func check_hit_reactions() -> void:
 	check(p.hp == 1000 and not SimPlayers.is_reacting(p), "Dodging outside the red circle avoids the launch")
 	e = reset(GameSim.BOSS, GameSim.BURROWER)
 	SimBosses.add_telegraph(sim, "circle", p.pos, 2 * GameSim.T, 35)
-	SimEnemies.tick_tele(sim, SimBosses.SLAM_WINDUP + 0.01)
+	SimEnemies.tick_tele(sim, SimBosses.TELEGRAPH + 0.01)
 	check(p.hp == 965 and not SimPlayers.is_reacting(p), "Another boss's circular attack does not trigger Juggernaut's launch")
 	e = reset(GameSim.BOSS, GameSim.JUGGERNAUT)
 	e.dash = Vector2(1, 0.25).normalized()
@@ -569,6 +579,8 @@ func chain_step(seconds: float) -> void:
 		SimPlayers.tick_players(sim, 0.05)
 		sim.tick_enemies(0.05)
 		SimEnemies.tick_tele(sim, 0.05)
+		SimBosses.tick_acid_pools(sim)
+		SimBossSkills.tick_boss_fx(sim, 0.05)
 
 func check_chainwarden() -> void:
 	check(SimBosses.boss_title(GameSim.CHAINWARDEN) == "NOX-02 Chainwarden", "Boss 2 is renamed Chainwarden")
@@ -609,16 +621,22 @@ func check_chainwarden() -> void:
 	e.special_cd = 0
 	e.cd = INF
 	SimChainwarden.tick(sim, e, .05)
-	check(e.act == "chain_wind" and e.next_chain_skill == "sweep", "Hook locks its aim and queues the sweep as the next skill")
-	chain_step(.5)
-	check(p.hp == 1000, "The chain does not hit during its casting wind-up")
+	check(e.act == "chain_fly" and e.next_chain_skill == "sweep", "Hook fires immediately with no wind-up delay and queues the sweep as the next skill")
 	for i in range(12):
 		chain_step(.05)
 		if p.hit_kind == "pull":
 			break
 	check(p.hp == 992 and p.hit_kind == "pull" and e.act == "chain_pull", "The fast moving hook hits and starts a timed pull")
 	check(sim.snapshot().chains.size() == 1 and sim.snapshot().chains[0][2] == 1, "A hooked player is attached to the visible chain in snapshots")
-	chain_step(.6)
+	var pull_start_dist: float = p.pos.distance_to(e.pos)
+	var expected_travel: float = float(p.hit_distance)
+	chain_step(.05)
+	var moved_early: float = pull_start_dist - p.pos.distance_to(e.pos)
+	check(moved_early > 0.0 and moved_early < expected_travel * 0.12, "Pull eases in smoothly instead of snapping the player toward the boss on catch")
+	chain_step(.25)
+	var moved_mid: float = pull_start_dist - p.pos.distance_to(e.pos)
+	check(SimPlayers.is_reacting(p) and moved_mid > expected_travel * 0.4 and moved_mid < expected_travel * 0.75, "Pull glides steadily across the middle of its duration")
+	chain_step(.3)
 	check(not SimPlayers.is_reacting(p) and p.pos.distance_to(e.pos) < 2 * GameSim.T and p.pos.distance_to(e.pos) >= e.r + .6 * GameSim.T, "Hook draws the player close over half a second without overlapping the boss")
 	check(sim.snapshot().chains.is_empty() and e.special_cd > 0, "The tether disappears and the boss uses its shared special cooldown")
 	for protection in ["wall", "invulnerable", "fatal", "miss"]:
@@ -659,14 +677,209 @@ func check_chainwarden() -> void:
 			p.pos = e.pos + Vector2(0, 3 * GameSim.T)
 		p.hp = 1000
 		chain_step(.05)
-		if e.act != last and e.act in ["chain_wind", "sweep_wind"]:
+		if e.act != last and e.act in ["chain_fly", "sweep_wind"]:
 			order.append(e.act)
 		last = e.act
 		if order.size() == 4:
 			break
-	check(order == ["chain_wind", "sweep_wind", "chain_wind", "sweep_wind"], "Chainwarden strictly alternates its hook and fan sweep")
+	check(order == ["chain_fly", "sweep_wind", "chain_fly", "sweep_wind"], "Chainwarden strictly alternates its instant hook and fan sweep")
 	check(sim.enemies.size() == 1 and not sim.enemies.any(func(x): return x.get("summon", false)), "Boss 2 no longer summons any Grunts")
 	for act in ["sweep_wind", "sweep_hit", "chain_wind", "chain_fly", "chain_pull"]:
 		e.act = act
 		e.act_t = .2
 		check(not EnemyView.boss_skill_animation(sim.snapshot().en[0]).is_empty(), act + " selects a dedicated full-body sprite animation")
+
+func check_bio_cannon() -> void:
+	var e = reset(GameSim.BOSS, GameSim.BIO_CANNON)
+	var p = sim.players[1]
+	p.pos = field + Vector2(4 * GameSim.T, 0)
+	p.hp = 100
+	p.maxhp = 100
+	e.sig_cd = 0.0
+	e.cd = INF
+	chain_step(0.05)
+	check(e.act == "glow" and e.next_bio_skill == "pool", "Bio-Cannon opens with its 16-orb barrage and queues the acid pool next")
+	chain_step(0.55)
+	check(sim.proj.size() == 16 and sim.proj.all(func(b): return b.get("poison", false) and b.get("kind", "") == "orb"), "Bio-Cannon fires 16 poisoning acid orbs after its reduced wind-up")
+	# Put a single orb directly into the player to verify poison duration, 2s ticks and anti-heal.
+	e.sig_cd = INF
+	sim.proj = [{"pos": p.pos - Vector2(6, 0), "vel": Vector2(4 * GameSim.T, 0), "dmg": 12.0, "ttl": 1.0, "kind": "orb", "poison": true}]
+	SimEnemies.tick_proj(sim, 0.05)
+	check(p.hp == 88 and SimPlayers.is_poisoned(sim, p) and sim.snapshot().poisoned.has(p.id), "Acid orb deals impact damage and applies 5-second poison exposed in snapshots")
+	sim.set_count(p, "bandage", 2)
+	sim.action(p.id, "bandage", 0)
+	check(p.channel == 0.0, "Bandage cannot start while poisoned")
+	sim.tactical_areas = [{"pos": p.pos, "owner": p.id, "kind": "heal", "until": sim.clock + 5.0, "next": sim.clock}]
+	SimTacticalItems.tick_tactical_items(sim)
+	check(p.hp == 88, "Healing flask area does not restore HP while poisoned")
+	sim.tactical_areas.clear()
+	chain_step(1.9)
+	check(p.hp == 88, "Poison waits the full 2 seconds before its first tick")
+	chain_step(0.15)
+	check(p.hp == 83, "Poison deals -5 HP on its first 2-second tick")
+	chain_step(2.0)
+	check(p.hp == 78, "Poison deals -5 HP on its second 2-second tick")
+	chain_step(1.1)
+	check(not SimPlayers.is_poisoned(sim, p) and p.hp == 78, "Poison expires cleanly after 5 seconds without extra ticks")
+	sim.action(p.id, "bandage", 0)
+	check(p.channel > 0.0, "Healing works normally again once poison expires")
+	p.channel = 0.0
+	# Second skill: targeted acid pool at the player's standing spot.
+	e = reset(GameSim.BOSS, GameSim.BIO_CANNON)
+	p.pos = field + Vector2(0, 6 * GameSim.T)
+	p.hp = 100
+	p.maxhp = 100
+	p.invuln = 0.0
+	SimPlayers.clear_poison(p)
+	e.next_bio_skill = "pool"
+	e.sig_cd = 0.0
+	e.cd = INF
+	var target_spot: Vector2 = Vector2(p.pos)
+	chain_step(0.05)
+	check(e.act == "acid_lob" and e.next_bio_skill == "barrage" and sim.tele.size() == 1 and Vector2(sim.tele[0].pos).distance_to(target_spot) < 12.0, "Bio-Cannon locks the player's standing position for its acid pool lob")
+	check(sim.snapshot().tele[0][7] != null, "Acid lob telegraph sends launch origin for client arc rendering")
+	chain_step(0.6)
+	check(sim.acid_pools.size() == 1 and sim.snapshot().acid_pools.size() == 1, "Acid lob splashes into a persistent acid pool after its reduced lob time")
+	check(p.hp == 85 and SimPlayers.is_poisoned(sim, p), "Standing inside the splash deals impact damage and applies poison")
+	# Stepping out and back in refreshes poison and deals pool standing damage.
+	var ally = sim.players[2]
+	ally.state = 0
+	ally.hp = 100
+	ally.maxhp = 100
+	ally.invuln = 0.0
+	SimPlayers.clear_poison(ally)
+	ally.pos = Vector2(sim.acid_pools[0].pos) + Vector2(10, 0)
+	SimBosses.tick_acid_pools(sim)
+	check(ally.hp == 94 and SimPlayers.is_poisoned(sim, ally), "Stepping into an active acid pool deals damage and inflicts poison")
+	chain_step(6.2)
+	check(sim.acid_pools.is_empty(), "Acid pool expires cleanly after its duration")
+
+func check_remaining_bosses() -> void:
+	# NOX-04 Burrower: instant emergence from underground with no surface telegraph delay.
+	var eb = reset(GameSim.BOSS, GameSim.BURROWER)
+	var pb = sim.players[1]
+	pb.pos = field + Vector2(2.0 * GameSim.T, 0)
+	pb.hp = 100
+	pb.maxhp = 100
+	pb.invuln = 0.0
+	eb.spd = 2.0 * GameSim.T
+	eb.next_burrow_skill = "burrow"
+	eb.sig_cd = 0.0
+	eb.cd = INF
+	chain_step(0.05)
+	check(eb.act == "burrow", "Burrower dives underground to chase its target")
+	chain_step(0.05)
+	check(eb.act == "" and sim.tele.is_empty() and pb.hp == 90 and pb.hit_kind == "launch_short", "Burrower surfaces immediately upon reaching its target for 10 damage without a surface delay")
+	check(Vector2(eb.pos).is_equal_approx(Vector2(eb.surface)), "Burrower emerges directly at its mound position without teleport offset")
+	check(sim.boss_fx.any(func(fx): return fx.kind == "burrow_pop"), "Instant emergence still spawns the burrow eruption FX")
+	# NOX-04 Burrower: Spine Eruption roots and damages along 3 diverging fissures.
+	var e = reset(GameSim.BOSS, GameSim.BURROWER)
+	var p = sim.players[1]
+	p.pos = field + Vector2(5 * GameSim.T, 0)
+	p.hp = 100
+	p.maxhp = 100
+	e.next_burrow_skill = "spines"
+	e.sig_cd = 0.0
+	e.cd = INF
+	chain_step(0.05)
+	check(e.act == "spine_wind" and sim.tele.size() == 3 and e.next_burrow_skill == "burrow", "Burrower telegraphs 3 spine fissures and alternates back to burrow")
+	chain_step(1.25)
+	check(p.hp == 78 and p.hit_kind == "root", "Burrower's Spine Eruption deals 22 damage and roots the target")
+	# NOX-05 Earthshaker: Shockwave Fissure + Tremor Ring (Donut AoE safe inside).
+	check(SimBosses.boss_title(GameSim.EARTHSHAKER) == "NOX-05 Earthshaker", "Boss 5 is renamed Earthshaker")
+	e = reset(GameSim.BOSS, GameSim.EARTHSHAKER)
+	p.pos = field + Vector2(4.4 * GameSim.T, 0)
+	p.hp = 100
+	p.maxhp = 100
+	p.invuln = 0.0
+	p.hit_kind = ""
+	e.sig_cd = 0.0
+	e.cd = INF
+	chain_step(0.05)
+	check(e.act == "quake_wind" and e.next_quake_skill == "ring", "Earthshaker opens with Shockwave Fissure and queues Tremor Ring")
+	chain_step(1.3)
+	check(p.hp == 74, "Shockwave Fissure blasts deal 26 damage along the line")
+	e = reset(GameSim.BOSS, GameSim.EARTHSHAKER)
+	p.pos = field + Vector2(4.5 * GameSim.T, 0)
+	p.hp = 100
+	p.invuln = 0.0
+	p.hit_kind = ""
+	var inside_safe = sim.players[2]
+	inside_safe.state = 0
+	inside_safe.hp = 100
+	inside_safe.invuln = 0.0
+	inside_safe.pos = field + Vector2(1.0 * GameSim.T, 0)
+	e.next_quake_skill = "ring"
+	e.sig_cd = 0.0
+	e.cd = INF
+	chain_step(2.0)
+	check(p.hp == 76 and inside_safe.hp == 100, "Tremor Ring damages players in the expanding band while leaving the inner circle safe")
+	# NOX-06 Phantom: Cloak vanish FX, persistent fast pursuit until catch-up, and halved 0.45s ambush delay.
+	var ep = reset(GameSim.BOSS, GameSim.PHANTOM)
+	p.pos = field + Vector2(10 * GameSim.T, 0)
+	p.hp = 100
+	p.invuln = 0.0
+	ep.spd = 2.0 * GameSim.T
+	ep.next_phantom_skill = "cloak"
+	ep.sig_cd = 0.0
+	ep.cd = INF
+	sim.audio_events.clear()
+	chain_step(0.05)
+	check(ep.act == "cloak" and sim.boss_fx.any(func(fx): return fx.kind == "phantom_cloak"), "Phantom spawns its vanish FX when entering cloak")
+	var start_x: float = float(ep.pos.x)
+	chain_step(0.5)
+	check(ep.act == "cloak" and ep.pos.x - start_x > 1.45 * GameSim.T, "Cloaked Phantom chases significantly faster than normal speed")
+	# Keep player just outside 2 tiles for > 3.5 s to verify cloak never expires until catch-up.
+	for _k in range(80):
+		p.pos = Vector2(ep.pos) + Vector2(3.5 * GameSim.T, 0)
+		chain_step(0.05)
+	check(ep.act == "cloak", "Phantom remains cloaked past 3.5s until it actually catches up to the player")
+	p.pos = Vector2(ep.pos) + Vector2(1.5 * GameSim.T, 0)
+	chain_step(0.05)
+	check(ep.act == "ambush" and is_equal_approx(ep.act_t, SimBosses.PHANTOM_AMBUSH_WINDUP), "Phantom uncloaks on catch-up with its halved 0.45s ambush wind-up")
+	chain_step(0.5)
+	check(sim.audio_events.any(func(ev): return ev[1] == "boss_phantom_slash"), "Phantom emits its dedicated slash sound on ambush strike")
+	# NOX-06 Phantom: Mirage Cross spawns flanking clones and applies 30% frost slow.
+	e = reset(GameSim.BOSS, GameSim.PHANTOM)
+	p.pos = field + Vector2(5 * GameSim.T, 0)
+	p.hp = 100
+	p.invuln = 0.0
+	p.hit_kind = ""
+	SimPlayers.clear_poison(p)
+	e.next_phantom_skill = "mirage"
+	e.sig_cd = 0.0
+	e.cd = INF
+	chain_step(0.05)
+	check(e.act == "mirage_wind" and sim.boss_fx.size() == 1 and e.next_phantom_skill == "cloak", "Phantom winds up Mirage Cross with flanking clones and queues cloak next")
+	chain_step(1.4)
+	check(p.hp == 80 and SimPlayers.is_slowed(sim, p) and sim.snapshot().slowed.has(p.id), "Mirage Cross deals 20 damage and applies frost slow exposed in snapshots")
+	check(SimTacticalItems.player_speed(sim, p) < GameSim.SPEED, "Frost slow reduces authoritative player movement speed")
+	# NOX-07 Voltspire: full front damage, 4 sequential Lightning Calls, and 80-deg Arc Beam Sweep.
+	check(SimBosses.boss_title(GameSim.VOLTSPIRE) == "NOX-07 Voltspire", "Boss 7 is renamed Voltspire")
+	e = reset(GameSim.BOSS, GameSim.VOLTSPIRE)
+	e.face = 0.0
+	p.pos = field + Vector2(4 * GameSim.T, 0)
+	p.hp = 100
+	p.invuln = 0.0
+	p.hit_kind = ""
+	var bhp0: float = float(e.hp)
+	SimPlayers.hit(sim, e, 100.0, p)
+	check(is_equal_approx(bhp0 - float(e.hp), 100.0), "Voltspire takes full frontal damage without the removed Ironhide passive")
+	e.sig_cd = 0.0
+	e.cd = INF
+	chain_step(0.05)
+	check(e.act == "volt_call" and e.next_volt_skill == "beam", "Voltspire opens with Lightning Call and queues Arc Beam Sweep")
+	chain_step(1.0)
+	check(p.hp == 78 and p.hit_kind == "shock", "Lightning Call strikes the player for 22 damage and brief electric shock")
+	e = reset(GameSim.BOSS, GameSim.VOLTSPIRE)
+	p.pos = field + Vector2(5 * GameSim.T, 0)
+	p.hp = 100
+	p.invuln = 0.0
+	p.hit_kind = ""
+	e.next_volt_skill = "beam"
+	e.sig_cd = 0.0
+	e.cd = INF
+	chain_step(0.05)
+	check(e.act == "beam_wind" and e.next_volt_skill == "lightning", "Voltspire telegraphs its Arc Beam Sweep and alternates back to Lightning Call")
+	chain_step(1.8)
+	check(p.hp == 75 and sim.boss_fx.any(func(x): return x.kind == "arc_beam"), "Arc Beam Sweep sweeps across the player for 25 damage")

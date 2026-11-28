@@ -27,7 +27,7 @@ func setup(hud: Control) -> void:
 
 func draw_layer(c: Control, layer: String) -> void:
 	var ph = main.snap.get("ph", "")
-	if not ph in ["day", "dusk", "night", "result"]:
+	if not ph in ["day", "dusk", "night"]:
 		return
 	var vs = c.size
 	var me = main.snap.ps.get(main.my_id)
@@ -166,7 +166,7 @@ func draw_status(c, vs, me, ph) -> void:
 	# beside it: the armour worn (no bag slot), then the bandages and healing flasks carried
 	main.inventory.draw_stat_slots(c, Vector2(vs), me)
 	main.text(c, Vector2(92, vs.y - 46), GameSim.ROLES[me[1]].to_upper(), 12, Main.ROLE_COL[me[1]], 0, -1.0, true)
-	if me[5] != 0:
+	if me[5] != 0 and ph != "result":
 		main.text(c, Vector2(0, vs.y / 2 + 40), "DOWN  %ds" % [me[6]] if me[5] == 1 else "DEAD", 18, NEON_RED, 1, vs.x, true)
 
 # red screen edges after a hit

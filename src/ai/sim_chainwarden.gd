@@ -7,11 +7,11 @@ const SWEEP_ANGLE: float = PI * 2.0 / 3.0
 const SWEEP_WIND: float = 0.8
 const SWEEP_HIT: float = 0.35
 const STUN_TIME: float = 1.5
-const HOOK_WIND: float = 0.55
+const HOOK_WIND: float = 0.0
 const HOOK_RANGE: float = 10.0 * GameSim.T
-const HOOK_SPEED: float = 22.0 * GameSim.T
+const HOOK_SPEED: float = 18.0 * GameSim.T
 const HOOK_RADIUS: float = 6.0
-const PULL_TIME: float = 0.5
+const PULL_TIME: float = 0.55
 const SPECIAL_GAP: float = 3.0
 
 static func tick(sim: GameSim, e, dt: float) -> bool:
@@ -55,8 +55,11 @@ static func tick(sim: GameSim, e, dt: float) -> bool:
 		SimBosses.boss_act(sim, e, "sweep_wind", SWEEP_WIND)
 		e.next_chain_skill = "hook"
 	else:
-		SimBosses.boss_act(sim, e, "chain_wind", HOOK_WIND)
-		SimAudio.emit(sim, "chain_ready", e.pos, -int(e.id) - 1)
+		e.chain_tip = e.pos + Vector2.from_angle(e.face) * (e.r + 2.0)
+		e.chain_left = HOOK_RANGE - e.r - 2.0
+		e.chain_target = -1
+		SimBosses.boss_act(sim, e, "chain_fly", HOOK_RANGE / HOOK_SPEED)
+		SimAudio.emit(sim, "chain_throw", e.pos, -int(e.id) - 1)
 		e.next_chain_skill = "sweep"
 	return true
 
@@ -81,14 +84,17 @@ static func tick_hook(sim: GameSim, e, dt: float) -> void:
 			SimPlayers.hurt(sim, victim, SimBosses.boss_damage(sim, 8.0))
 			if victim.hp < hp and victim.state == 0:
 				SimPlayers.start_hit_reaction(sim, victim, "pull", e.pos - victim.pos)
-				victim.hit_distance = maxf(0.0, Vector2(victim.pos).distance_to(e.pos) - e.r - 0.7 * GameSim.T)
+				victim.hit_distance = maxf(0.0, Vector2(victim.pos).distance_to(e.pos) - e.r - 0.8 * GameSim.T)
 				e.chain_target = victim.id
+				e.chain_tip = Vector2(victim.pos)
 				SimBosses.boss_act(sim, e, "chain_pull", PULL_TIME)
 				SimAudio.emit(sim, "chain_catch", victim.pos, -int(e.id) - 1)
 				return
 		SimBosses.boss_act(sim, e, "chain_return", 0.2)
+		SimAudio.emit(sim, "chain_ready", e.pos, -int(e.id) - 1)
 	elif e.chain_left <= 0:
 		SimBosses.boss_act(sim, e, "chain_return", 0.2)
+		SimAudio.emit(sim, "chain_ready", e.pos, -int(e.id) - 1)
 
 static func snapshot(sim: GameSim) -> Array:
 	var chains: Array = []
@@ -98,5 +104,5 @@ static func snapshot(sim: GameSim) -> Array:
 		var tip: Vector2 = e.get("chain_tip", e.pos)
 		if e.act == "chain_return":
 			tip = Vector2(e.pos).lerp(tip, clampf(e.act_t / 0.2, 0, 1))
-		chains.append([e.pos, tip, e.get("chain_target", -1)])
+		chains.append([e.pos, tip, e.get("chain_target", -1), int(e.id), e.act, float(e.face)])
 	return chains

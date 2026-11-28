@@ -125,6 +125,46 @@ def chainwarden():
     effect('chain_catch', [mix((sample('impact', 'impactMetal_heavy_001'), .6, 0),
                                (noise(.5, 250, 3000, 4), .25, .04))])
 
+def boss_skills():
+    # Dedicated skill cues for Bio-Cannon, Burrower, Earthshaker, Phantom and Voltspire.
+    effect('boss_acid_charge', [mix((sample('scifi', 'slime_000', 1.15), .55, 0),
+                                    (tone(.48, 170, 520, 1.2, (1., .35, .15)), .38, 0),
+                                    (noise(.48, 600, 3800, 1.4), .24, 0), seconds=.52)])
+    effect('boss_acid_lob', [mix((sample('scifi', 'slime_001', .95), .68, 0),
+                                 (tone(.36, 210, 78, 4.5, (1., .4)), .5, 0),
+                                 (noise(.32, 300, 2800, 3.2), .3, .03), seconds=.48)])
+    effect('boss_acid_splash', [reverb(mix((sample('scifi', 'slime_000', .72), .72, 0),
+                                           (sample('impact', 'impactSoft_heavy_000', .85), .45, 0),
+                                           (noise(.62, 1100, 7200, 2.8), .42, .02), seconds=.72), .12)])
+    effect('boss_spine_erupt', [reverb(mix((sample('impact', 'impactMining_001', 1.1), .65, 0),
+                                           (sample('impact', 'impactMining_000', 1.35), .5, .07),
+                                           (sample('impact', 'impactMining_002', 1.25), .45, .14),
+                                           (noise(.55, 450, 5200, 3.2), .38, 0),
+                                           (tone(.45, 140, 52, 4.5, (1., .45)), .32, 0), seconds=.7), .14)])
+    effect('boss_quake_fissure', [reverb(mix((sample('scifi', 'lowFrequency_explosion_000', 1.05), .62, 0),
+                                             (sample('impact', 'impactMining_002', .78), .62, 0),
+                                             (tone(.58, 68, 30, 4.2, (1., .5, .2)), .45, 0),
+                                             (noise(.5, 180, 2600, 3.5), .35, .02), seconds=.72), .16)])
+    effect('boss_tremor_ring', [reverb(mix((sample('scifi', 'lowFrequency_explosion_000', .68), .68, 0),
+                                           (tone(1.05, 86, 32, 2.2, (1., .45, .22)), .52, 0),
+                                           (noise(1.0, 90, 1400, 1.8), .45, .04), seconds=1.18), .22)])
+    effect('boss_phantom_slash', [reverb(mix((noise(.32, 1400, 9200, 4.2), .68, 0),
+                                             (tone(.28, 1250, 420, 5.5, (1., .32, .14)), .45, 0),
+                                             (sample('rpg', 'drawKnife1', 1.35), .45, .02), seconds=.42), .18)])
+    effect('boss_mirage_dash', [reverb(mix((sample('scifi', 'forceField_001', 1.55), .58, 0),
+                                           (noise(.45, 900, 7600, 2.6), .58, 0),
+                                           (tone(.4, 680, 240, 3.8, (1., .28)), .38, .03), seconds=.58), .2)])
+    effect('boss_volt_charge', [mix((sample('scifi', 'forceField_000', 1.35), .5, 0),
+                                    (tone(.58, 220, 880, .8, (1., .45, .25, .12)), .42, 0),
+                                    (noise(.58, 1800, 8800, 1.5), .28, 0), seconds=.64)])
+    effect('boss_lightning_strike', [reverb(mix((noise(.14, 1600, 11000, 5.5), .85, 0),
+                                                (sample('scifi', 'explosionCrunch_000', 1.15), .65, .01),
+                                                (tone(.65, 190, 38, 3.6, (1., .5, .25)), .48, .02),
+                                                (noise(.78, 110, 1800, 2.8), .45, .05), seconds=.92), .22)])
+    effect('boss_arc_beam', [reverb(mix((sample('scifi', 'laserLarge_000', .85), .58, 0),
+                                        (tone(1.1, 310, 260, .6, (1., .55, .35, .2, .12)), .46, 0),
+                                        (noise(1.1, 1400, 8500, .9), .34, 0), seconds=1.22), .14)])
+
 def originals():
     # Organic breaths and resonant impacts, rather than the previous square-wave placeholder sounds.
     for name, base in [('growl', 82), ('hurt', 145), ('my_hurt', 105), ('enemy_die', 120), ('death', 92)]:
@@ -149,6 +189,7 @@ def originals():
     juggernaut_slam()
     juggernaut_charge()
     chainwarden()
+    boss_skills()
     effect('bow', [mix((tone(.35, 180+i*13, decay=12, harmonics=(1,.5,.26,.12)), .75, 0),
                       (sample('rpg','cloth'+str(i+1)), .2, 0), (noise(.12,1500,7500,7), .12, .015)) for i in range(3)])
     effect('dusk_horn', [reverb(mix((tone(2.5, 155, 210, .8, (1,.32,.16)), .5, 0), (tone(2.5, 158, 213, .8), .4, 0)), .3)])

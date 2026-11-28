@@ -24,7 +24,10 @@ static func tactical_description(id) -> Variant:
 	return ["DMG 22 | Reach 2.6", "Hits 2 targets"] if id == "long_spear" else ["DMG 30 | Stun 0.8s"] if id == "stun_maul" else ["Root: 2.5s"] if id == "vine_trap" else ["8 DMG/s | 5s"] if id == "poison_flask" else ["+8 HP/s | 5s"] if id == "healing_flask" else ["Speed +20% | 8s"] if id == "haste_tonic" else ["Hold E 2s: unlock", "Single use"] if id == "chest_key" else ["Blast DMG 32"] if id == "explosive_arrow" else ["+100 HP: door / tower"] if id == "repair_kit" else []
 
 static func player_speed(sim: GameSim, p) -> float:
-	return float(SPEED) * (1.2 if int(p.role) == 0 else 1.0) * (1.2 if p.get("haste_until", 0.0) > float(sim.clock) else 1.0)
+	var speed: float = float(SPEED) * (1.2 if int(p.role) == 0 else 1.0) * (1.2 if p.get("haste_until", 0.0) > float(sim.clock) else 1.0)
+	if SimPlayers.is_slowed(sim, p):
+		speed *= 0.7
+	return speed
 
 static func reset_tactical_items(sim: GameSim) -> void:
 	sim.tactical_areas.clear()
@@ -33,6 +36,7 @@ static func reset_tactical_items(sim: GameSim) -> void:
 	for p in sim.players.values():
 		p.repair_kit_t = 0.0
 		p.haste_until = 0.0
+		SimPlayers.clear_poison(p)
 
 static func selected_item(sim: GameSim, p) -> Variant:
 	var s = p.inv[int(p.sel)]
@@ -132,7 +136,7 @@ static func tick_tactical_items(sim: GameSim) -> void:
 						SimPlayers.hit(sim, e, 4.0, owner)
 			elif Cs.s(area.kind) == "heal":
 				for q in sim.players.values():
-					if int(q.state) == 0 and q.get("area_heal_at", 0.0) <= now and Vector2(q.pos).distance_to(Vector2(area.pos)) <= 1.8 * T and SimWorld.line_clear(sim, area.pos, q.pos) and Cs.set_add(sim.healed, int(q.id)):
+					if int(q.state) == 0 and not SimPlayers.is_poisoned(sim, q) and q.get("area_heal_at", 0.0) <= now and Vector2(q.pos).distance_to(Vector2(area.pos)) <= 1.8 * T and SimWorld.line_clear(sim, area.pos, q.pos) and Cs.set_add(sim.healed, int(q.id)):
 						q.area_heal_at = now + 0.5
 						q.hp = minf(float(q.maxhp), float(q.hp) + 4.0)
 		if now >= until:

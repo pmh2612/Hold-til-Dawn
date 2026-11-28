@@ -54,12 +54,12 @@ func draw_item_icon(canvas, id, centre: Vector2, scale: float) -> void:
 	canvas.draw_texture_rect(main.pixel(tex), Rect2((centre - size / 2).round(), size), false)
 
 # A projectile sprite in the world, turned to its flight direction.
-func draw_fx(n, pos: Vector2, angle: float) -> void:
+func draw_fx(n, pos: Vector2, angle: float, scale_: float = 1.0, mod_: Color = Color.WHITE) -> void:
 	var tex = fx_tex.get(n)
 	if tex == null:
 		return
-	main.draw_set_transform(pos, angle, Vector2.ONE)
-	main.draw_texture(tex, (-tex.get_size() / 2).round())
+	main.draw_set_transform(pos, angle, Vector2.ONE * scale_)
+	main.draw_texture(tex, (-tex.get_size() / 2).round(), mod_)
 	main.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 var bag_open = false
