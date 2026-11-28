@@ -99,6 +99,32 @@ def effect(name, versions, loop=False):
     if loop:
         CATALOG.setdefault('channels', []).append(name)
 
+def juggernaut_slam():
+    # One offline mix: a deep thud, breaking stone and a short earth-rumble tail.
+    body = mix((sample('scifi', 'lowFrequency_explosion_000', .8), .7, 0),
+               (sample('impact', 'impactMining_000', .85), .65, 0),
+               (sample('impact', 'impactMining_001', .95), .4, .08),
+               (tone(1.2, 47, 26, 5, (1., .45, .18)), .38, 0), seconds=1.65)
+    effect('boss_slam', [reverb(body, .15)])
+
+def juggernaut_charge():
+    # Broad-band rushing wind and heavy footfalls remain audible on small speakers.
+    rush = mix((noise(1.12, 160, 5200, .7), .6, 0),
+               (tone(1.12, 130, 55, 1.8, (1., .5, .25)), .25, 0),
+               *[(sample('impact', 'impactMining_000', 1.15), .28, at)
+                 for at in [0., .23, .46, .69, .92]], seconds=1.25)
+    effect('boss_charge', [envelope(rush, .025, .15)])
+
+def chainwarden():
+    effect('chain_ready', [mix((sample('impact', 'impactMetal_light_000'), .5, 0),
+                               (sample('impact', 'impactMetal_light_001'), .4, .12), seconds=.45)])
+    effect('chain_sweep', [mix((noise(.4, 350, 6500, 2), .6, 0),
+                               (sample('impact', 'impactMetal_heavy_000', 1.2), .45, .12))])
+    effect('chain_throw', [mix((noise(.5, 700, 8000, 2), .6, 0),
+                               *[(sample('impact', 'impactMetal_light_000', 1.5), .22, i*.065) for i in range(5)])])
+    effect('chain_catch', [mix((sample('impact', 'impactMetal_heavy_001'), .6, 0),
+                               (noise(.5, 250, 3000, 4), .25, .04))])
+
 def originals():
     # Organic breaths and resonant impacts, rather than the previous square-wave placeholder sounds.
     for name, base in [('growl', 82), ('hurt', 145), ('my_hurt', 105), ('enemy_die', 120), ('death', 92)]:
@@ -114,12 +140,15 @@ def originals():
     effect('boss_die', [reverb(mix((tone(2.5, 95, 28, 4), .7, 0), (noise(2.1, 80, 1400, 5), .8, .1)), .25)])
     effect('boss_warn', [mix((tone(1., 180, 620, .1, (1,.12)), .45, 0), (noise(1., 300, 3500, .1), .16, 0), seconds=1.)])
     effect('boss_swing', [mix((noise(.35, 60, 1800, 3), .6, 0), (tone(.35, 90, 40, 7), .5, .06))])
-    for name, source, speed in [('boss_slam','lowFrequency_explosion_000',1.1), ('boss_surface','explosionCrunch_002',.75),
+    for name, source, speed in [('boss_surface','explosionCrunch_002',.75),
                               ('boss_burrow','slime_001',.55), ('boss_barrage','slime_000',.8),
                               ('boss_stagger','impactMetal_001',.65), ('boss_ambush','forceField_001',1.4),
-                              ('boss_cloak','forceField_000',.7), ('boss_charge','thrusterFire_001',.8),
+                              ('boss_cloak','forceField_000',.7),
                               ('boss_summon','spaceEngineLow_000',1.4)]:
         effect(name, [envelope(sample('scifi',source,speed))])
+    juggernaut_slam()
+    juggernaut_charge()
+    chainwarden()
     effect('bow', [mix((tone(.35, 180+i*13, decay=12, harmonics=(1,.5,.26,.12)), .75, 0),
                       (sample('rpg','cloth'+str(i+1)), .2, 0), (noise(.12,1500,7500,7), .12, .015)) for i in range(3)])
     effect('dusk_horn', [reverb(mix((tone(2.5, 155, 210, .8, (1,.32,.16)), .5, 0), (tone(2.5, 158, 213, .8), .4, 0)), .3)])
@@ -273,9 +302,26 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--sources',type=Path,default=ROOT/'.tmp/audio-refresh/sources')
     parser.add_argument('--refresh-music',action='store_true',help='rebuild cached score conversions')
+    parser.add_argument('--juggernaut-slam',action='store_true',help='rebuild only the ground-slam effect')
+    parser.add_argument('--juggernaut-skills',action='store_true',help='rebuild only the slam and charge effects')
+    parser.add_argument('--chainwarden',action='store_true',help='rebuild and register only the four chain skill effects')
     args=parser.parse_args()
     for sub in ['sfx','ambience','music']: (OUT/sub).mkdir(parents=True,exist_ok=True)
     for pack in ['rpg','impact','interface','scifi']: PACKS[pack]=zipfile.ZipFile(args.sources/(pack+'.zip'))
+    if args.chainwarden:
+        chainwarden()
+        path = OUT/'catalog.json'
+        existing = json.loads(path.read_text(encoding='utf-8'))
+        existing['effects'].update(CATALOG['effects'])
+        path.write_text(json.dumps(existing,indent=2)+'\n',encoding='utf-8')
+        print('CHAINWARDEN AUDIO OK: ready, sweep, throw and catch')
+        return
+    if args.juggernaut_slam or args.juggernaut_skills:
+        juggernaut_slam()
+        if args.juggernaut_skills:
+            juggernaut_charge()
+        print('JUGGERNAUT AUDIO OK: ground impact' + (' and charge' if args.juggernaut_skills else ''))
+        return
     print('Building material and interaction foley...', flush=True)
     foley()
     print('Building creature, radio and warning cues...', flush=True)

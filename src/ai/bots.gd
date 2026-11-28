@@ -61,7 +61,7 @@ static func tick(sim, dt) -> void:
 		p.ent = false
 		p.nav_t = p.get("nav_t", 0.0) - dt
 		p.bot_cd -= dt
-		if playing and p.state == 0:
+		if playing and p.state == 0 and not SimPlayers.is_reacting(p):
 			think(sim, p, slot, dt)
 		slot += 1
 

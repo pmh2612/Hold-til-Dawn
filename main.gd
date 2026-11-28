@@ -93,6 +93,7 @@ var shot_path = ""
 var shot_at = 4.0
 var shot_pos
 var clock = 0.0
+var hit_snapshot_at: float = 0.0
 var cam = Camera2D.new()
 var sound = Sound.new()
 var tint = CanvasModulate.new()
@@ -218,8 +219,12 @@ func move(dt) -> void:
 		local_pos = me[2]
 		pending_inputs.clear()
 	var playing: bool = snap.ph in ["day", "dusk", "night"]
+	var reacting: bool = me[5] == 0 and snap.get("hit_reactions", {}).has(my_id)
 	var local_before: Vector2 = Vector2(local_pos)
-	if playing and me[5] == 0:
+	if reacting:
+		local_pos = sim.players[my_id].pos if sim != null and sim.players.has(my_id) else me[2]
+		pending_inputs.clear()
+	elif playing and me[5] == 0:
 		var dir = Vector2(self.key(68) - self.key(65), self.key(83) - self.key(87))
 		var destination = local_pos + dir.normalized() * GameSim.SPEED * (1.2 if me[1] == 0 else 1.0) * (1.2 if me.size() > 30 and me[30] else 1.0) * dt
 		local_pos = geometry.move_body(local_pos, destination, BODY_R, SimWorld.walls(self.doors_open()))
@@ -234,12 +239,12 @@ func move(dt) -> void:
 		# from the body, not the feet
 		var aim = (get_global_mouse_position() - (local_pos - Vector2(0, LIFT))).angle()
 		var primary_attack: bool = inventory.filter_primary_attack(build_menu.filter_primary_attack(Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)))
-		var atk = playing and not inventory.ui_captures_mouse() and primary_attack
+		var atk = playing and not reacting and not inventory.ui_captures_mouse() and primary_attack
 		var hand_item = me[7][int(me[25])]
 		if hand_item != null and SimTacticalItems.is_tactical_use(Cs.s(hand_item[0])):
 			atk = false
-		var inter = playing and not inventory.ui_captures_mouse() and Input.is_physical_key_pressed(69)
-		var ent = playing and Input.is_physical_key_pressed(70)
+		var inter = playing and not reacting and not inventory.ui_captures_mouse() and Input.is_physical_key_pressed(69)
+		var ent = playing and not reacting and Input.is_physical_key_pressed(70)
 		input_sequence += 1
 		pending_inputs[input_sequence] = local_pos
 		if pending_inputs.size() > 128:
@@ -333,7 +338,10 @@ func on_snap(d) -> void:
 	for id in d.get("ps", {}):
 		prev_php[id] = d.ps[id][3]
 	geometry.rebuild(harvest_view.node_colliders(d.get("nodes", [])), d.get("tw", []).map(func(tw): return {"pos": tw[1]}), d.get("walls", []).map(func(w): return {"pos": w[0], "vert": w[1]}))
-	if mine != null and mine[15] == local_tp and mine.size() > 24:
+	if mine != null and (d.get("hit_reactions", {}).has(my_id) or snap.get("hit_reactions", {}).has(my_id)):
+		local_pos = mine[2]
+		pending_inputs.clear()
+	elif mine != null and mine[15] == local_tp and mine.size() > 24:
 		var acknowledged: int = int(mine[24])
 		if pending_inputs.has(acknowledged):
 			var correction: Vector2 = Vector2(mine[2] - pending_inputs[acknowledged])
@@ -343,6 +351,7 @@ func on_snap(d) -> void:
 					pending_inputs.erase(sequence)
 				else:
 					pending_inputs[sequence] += correction
+	hit_snapshot_at = float(clock)
 	snap = d
 	exploration_chests.sync_chest_panel(mine, old_me)
 
@@ -546,6 +555,7 @@ func _draw() -> void:
 	draw_rect(Rect2(-h, h * 2), Color("4F4B42"))
 	base_look.draw_base_floor()
 	enemy_view.draw_telegraphs()
+	enemy_view.draw_chains()
 	tactical_items.draw_tactical_areas()
 	survival_feedback.draw_construction_ground()
 	# from outside, the inside of the base is fogged over (src/world/view/base_fog.gd)

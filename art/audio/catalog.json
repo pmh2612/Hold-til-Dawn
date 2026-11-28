@@ -400,6 +400,18 @@
     ],
     "lose": [
       "res://art/audio/sfx/lose_01.wav"
+    ],
+    "chain_ready": [
+      "res://art/audio/sfx/chain_ready_01.wav"
+    ],
+    "chain_sweep": [
+      "res://art/audio/sfx/chain_sweep_01.wav"
+    ],
+    "chain_throw": [
+      "res://art/audio/sfx/chain_throw_01.wav"
+    ],
+    "chain_catch": [
+      "res://art/audio/sfx/chain_catch_01.wav"
     ]
   },
   "loops": {

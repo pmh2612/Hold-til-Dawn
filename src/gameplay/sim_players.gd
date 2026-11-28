@@ -6,6 +6,46 @@ extends RefCounted
 static var ROLE_HP = [90.0, 100.0, 110.0]
 # seconds of holding E over a dead teammate to use a Revival kit on them
 const REVIVE_KIT_TIME: float = 3.0
+const SLAM_REACTION_TIME: float = 0.7
+const CHARGE_REACTION_TIME: float = 0.55
+
+static func is_reacting(p) -> bool:
+	return int(p.state) == 0 and p.get("hit_kind", "") != ""
+
+static func start_hit_reaction(sim: GameSim, p, kind: String, direction: Vector2) -> void:
+	if p.state != 0:
+		return
+	p.hit_sequence = int(p.get("hit_sequence", 0)) + 1
+	p.hit_kind = kind
+	p.hit_started = float(sim.clock)
+	p.hit_duration = 1.5 if kind == "stun" else 0.5 if kind == "pull" else SLAM_REACTION_TIME if kind == "slam" else CHARGE_REACTION_TIME
+	p.hit_direction = direction.normalized() if direction.length_squared() > 0.001 else Vector2.RIGHT
+	p.hit_distance = 0.0 if kind in ["stun", "pull"] else 0.6 * T if kind == "slam" else 2.0 * T
+	p.hit_progress = 0.0
+	p.move_credit = 0.0
+	p.atk = false
+	p.inter = false
+	p.ent = false
+	p.swing = 0.0
+	p.activity = "hit"
+
+static func tick_hit_reaction(sim: GameSim, p) -> void:
+	var progress: float = clampf((float(sim.clock) - float(p.hit_started)) / float(p.hit_duration), 0, 1)
+	# Ease out along the ground. Height is presentation-only; all movement still collides with walls/water.
+	var before: float = 1.0 - pow(1.0 - float(p.hit_progress), 2)
+	var after: float = 1.0 - pow(1.0 - progress, 2)
+	var old: Vector2 = p.pos
+	p.pos = SimWorld.move_actor(sim, old, old + Vector2(p.hit_direction) * float(p.hit_distance) * (after - before), 0.4 * T)
+	if not p.inside and sim.phase == "night" and not SimPhases.any_breach(sim):
+		p.pos = SimWorld.push_out(p.pos, 0.4 * T)
+	p.hit_progress = progress
+	p.activity = "hit"
+	p.move_credit = 0.0
+	p.atk = false
+	p.inter = false
+	p.ent = false
+	if progress >= 1:
+		p.hit_kind = ""
 
 # constants shared with GameSim
 const ARROW_SPEED = GameSim.ARROW_SPEED
@@ -135,6 +175,8 @@ static func reset_player(sim: GameSim, p) -> void:
 	p.attack_sequence = 0
 	p.attack_item = ""
 	p.attack_aim = 0.0
+	p.hit_kind = ""
+	p.hit_sequence = 0
 	p.channel = 0.0
 	p.repair_kit_t = 0.0
 	p.tower_build_t = 0.0
@@ -173,7 +215,7 @@ static func reset_player(sim: GameSim, p) -> void:
 
 # Resolve before any bleed timer ticks, independent of player iteration order.
 static func revive_target_for(sim: GameSim, p) -> Variant:
-	if p.state != 0 or not p.inter or p.inside or p.atk or sim.radio_builder == int(p.id) or p.craft_idx >= 0 or p.channel > 0 or p.get("tower_build_t", 0.0) > 0 or p.get("repair_kit_t", 0.0) > 0 or p.get("unlock_chest", -1) >= 0:
+	if p.state != 0 or is_reacting(p) or not p.inter or p.inside or p.atk or sim.radio_builder == int(p.id) or p.craft_idx >= 0 or p.channel > 0 or p.get("tower_build_t", 0.0) > 0 or p.get("repair_kit_t", 0.0) > 0 or p.get("unlock_chest", -1) >= 0:
 		return null
 	for state in [1, 2]:
 		if state == 2 and SimInventory.count(sim, p, "revive") == 0:
@@ -217,6 +259,9 @@ static func tick_players(sim: GameSim, dt) -> void:
 				say(sim, "%s died" % [p.name])
 		if p.state != 0:
 			SimConstruction.tick_tower_construction(sim, p, 0)
+			continue
+		if is_reacting(p):
+			tick_hit_reaction(sim, p)
 			continue
 		if sim.radio_builder == int(p.id):
 			SimSupplies.try_build_radio(sim, p, float(dt))
@@ -500,6 +545,7 @@ static func hurt(sim: GameSim, p, dmg) -> void:
 		SimSupplies.cancel_radio_build(sim)
 	SimSupplies.cancel_chest_unlock(sim, p)
 	if p.hp <= 0:
+		p.hit_kind = ""
 		p.hp = 0.0
 		p.state = 1
 		p.bleed = 30.0

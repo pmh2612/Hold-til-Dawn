@@ -32,3 +32,11 @@ from the main menu's AUDIO CREDITS button.
 
 Rebuild: python tools/fetch_audio_sources.py, then python tools/audio_assets.py. Downloads stay in the
 ignored .tmp/audio-refresh/sources cache; only the prepared, compact game assets are shipped.
+
+Juggernaut ground impact layers the existing Kenney CC0 low-frequency explosion
+and mining impacts with an original low bass decay. Offline rebuild of this
+one cue: `python tools/audio_assets.py --juggernaut-slam`.
+The charge layers original filtered rushing wind and bass with Kenney CC0 mining
+footfalls. Rebuild both skills: `python tools/audio_assets.py --juggernaut-skills`.
+
+Chainwarden ready/sweep/throw/catch cues combine original filtered wind with Kenney CC0 metal impacts. Rebuild: `python tools/audio_assets.py --chainwarden`.

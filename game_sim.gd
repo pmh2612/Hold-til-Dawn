@@ -78,7 +78,8 @@ var bot_step_accumulator: float = 0.0
 # Bosses hunt the nearest living player within twice Scout night sight, then the nearest structure.
 # Special wind-ups, dashes and burrowing commit briefly; there is no post-special recovery lock.
 const JUGGERNAUT: int = 0
-const BROODMOTHER: int = 1
+const CHAINWARDEN: int = 1
+const BROODMOTHER: int = CHAINWARDEN # legacy ID for saved tools/atlas names
 const BIO_CANNON: int = 2
 const BURROWER: int = 3
 const GATEBREAKER: int = 4
@@ -302,6 +303,11 @@ func input(id, pos, aim, atk, inter, ent, tp, sequence = null) -> void:
 	if sequence > 0 and sequence <= p.input_sequence:
 		return
 	p.input_sequence = sequence
+	if SimPlayers.is_reacting(p):
+		p.atk = false
+		p.inter = false
+		p.ent = false
+		return
 	p.aim = aim
 	p.atk = atk
 	p.inter = inter
@@ -324,6 +330,8 @@ func input(id, pos, aim, atk, inter, ent, tp, sequence = null) -> void:
 func action(id, kind, arg) -> void:
 	var p = players.get(id)
 	if p == null:
+		return
+	if SimPlayers.is_reacting(p) and not kind in ["select", "lobby", "cancel_craft"]:
 		return
 	if kind == "role":
 		if phase == "lobby":
@@ -481,12 +489,20 @@ func snapshot_attack_poses() -> Dictionary:
 		poses[id] = [int(p.get("attack_sequence", 0)), Cs.s(p.get("attack_item", "")), float(p.get("attack_aim", 0.0))]
 	return poses
 
+func snapshot_hit_reactions() -> Dictionary:
+	var reactions: Dictionary = {}
+	for id in players:
+		var p = players[id]
+		if SimPlayers.is_reacting(p):
+			reactions[id] = [int(p.hit_sequence), Cs.s(p.hit_kind), maxf(0, clock - float(p.hit_started)), float(p.hit_duration), Vector2(p.hit_direction)]
+	return reactions
+
 func snapshot() -> Variant:
 	var ps = {}
 	for id in players:
 		var p = players[id]
 		ps[id] = [p.name, p.role, p.pos, p.hp, p.maxhp, p.state, p.bleed, p.inv, p.weapon, p.armour, 0, p.swing > 0, p.aim, p.channel, p.revive_p, p.tp, p.note if p.note_t > 0 else "", p.kills, p.dmg, p.inside, p.entry, p.gather_acc, p.activity, p.activity_target, p.input_sequence, p.sel, p.craft_idx, p.craft_t / SimPlayers.player_craft_duration(self, p, int(p.craft_idx)) if p.craft_idx >= 0 else 0.0, p.revives, p.taken, p.get("haste_until", 0.0) > clock, p.get("repair_kit_t", 0.0), p.open_chest, p.unlock_chest, float(p.unlock_t) / CHEST_UNLOCK_TIME, p.chest_use_seq]
-	return {"audio": audio_events.duplicate(), "ph": phase, "t": t, "k": k, "base": base_hp, "doors": doors, "active": active, "ps": ps, "attack_pose": snapshot_attack_poses(), "en": enemies.map(func(e): return [e.id, e.type, e.pos, e.hp, e.maxhp, e.r, e.get("kind", -1), SimBosses.boss_look(self, e), e.get("face", 0.0), e.get("swing", 0.0) > 0, e.get("stun_until", 0.0) > clock, e.get("slow_until", 0.0) > clock, float(e.get("act_t", 0.0)), clock - float(e.get("slam_at", -99.0))]), "proj": proj.map(func(b): return [b.pos, b.get("kind", "spit")]), "tele": tele.map(func(tl): return [tl.pos, tl.r, tl.t / tl.dur, tl.kind, tl.end, tl.ang, tl.spread]), "nodes": snapshot_nodes(), "drops": drops.map(func(d): return [d.pos, d.item, d.n, d.ttl]), "msg": msg if msg_t > 0 or phase == "result" else "", "unlock": unlock, "votes": votes.size(), "need": ceili(0.6 * self.humans()), "leader": self.leader(), "mode": mode, "ext": ext, "pads": pad_clear, "broken": broken, "dpause": door_pause.map(func(v): return v > 0), "inside_en": SimPhases.enemy_inside(self), "tw": towers.filter(func(tw): return tw != null).map(func(tw): return [tw.slot, tw.pos, tw.hp, tw.wrecked, tw.target != null, tw.target if tw.target != null else Vector2.ZERO]), "free_tower": free_tower, "nq": [SimNightSpawns.night_killed(self), night_quota], "sup": SimSupplies.supply_snapshot(self), "chests": SimSupplies.chest_contents_snapshot(self), "rescue": SimSupplies.rescue_snapshot(self), "construction": SimConstruction.construction_snapshot(self), "boss_next": SimBosses.boss_kind_for(self, k) if k == 2 or k == 4 else -1, "sto": storage, "walls": built_walls.map(func(w): return [w.pos, w.vert, w.hp, w.maxhp, w.kind]), "result": result, "tactical": SimTacticalItems.tactical_snapshot(self), "arrows": arrows.map(func(a): return [a.pos, a.vel.angle(), a.get("explosive", false)])}
+	return {"audio": audio_events.duplicate(), "ph": phase, "t": t, "k": k, "base": base_hp, "doors": doors, "active": active, "ps": ps, "attack_pose": snapshot_attack_poses(), "hit_reactions": snapshot_hit_reactions(), "en": enemies.map(func(e): return [e.id, e.type, e.pos, e.hp, e.maxhp, e.r, e.get("kind", -1), SimBosses.boss_look(self, e), e.get("face", 0.0), e.get("swing", 0.0) > 0, e.get("stun_until", 0.0) > clock, e.get("slow_until", 0.0) > clock, float(e.get("act_t", 0.0)), clock - float(e.get("slam_at", -99.0))]), "chains": SimChainwarden.snapshot(self), "proj": proj.map(func(b): return [b.pos, b.get("kind", "spit")]), "tele": tele.filter(func(tl): return not tl.get("hidden", false)).map(func(tl): return [tl.pos, tl.r, tl.t / tl.dur, tl.kind, tl.end, tl.ang, tl.spread]), "nodes": snapshot_nodes(), "drops": drops.map(func(d): return [d.pos, d.item, d.n, d.ttl]), "msg": msg if msg_t > 0 or phase == "result" else "", "unlock": unlock, "votes": votes.size(), "need": ceili(0.6 * self.humans()), "leader": self.leader(), "mode": mode, "ext": ext, "pads": pad_clear, "broken": broken, "dpause": door_pause.map(func(v): return v > 0), "inside_en": SimPhases.enemy_inside(self), "tw": towers.filter(func(tw): return tw != null).map(func(tw): return [tw.slot, tw.pos, tw.hp, tw.wrecked, tw.target != null, tw.target if tw.target != null else Vector2.ZERO]), "free_tower": free_tower, "nq": [SimNightSpawns.night_killed(self), night_quota], "sup": SimSupplies.supply_snapshot(self), "chests": SimSupplies.chest_contents_snapshot(self), "rescue": SimSupplies.rescue_snapshot(self), "construction": SimConstruction.construction_snapshot(self), "boss_next": SimBosses.boss_kind_for(self, k) if k == 2 or k == 4 else -1, "sto": storage, "walls": built_walls.map(func(w): return [w.pos, w.vert, w.hp, w.maxhp, w.kind]), "result": result, "tactical": SimTacticalItems.tactical_snapshot(self), "arrows": arrows.map(func(a): return [a.pos, a.vel.angle(), a.get("explosive", false)])}
 
 func tick_bots(dt: float) -> void:
 	bot_step_accumulator += dt

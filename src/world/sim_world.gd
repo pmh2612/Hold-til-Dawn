@@ -287,13 +287,13 @@ static func line_clear(sim: GameSim, a, b, ignore = null) -> Variant:
 	if ignore == null: ignore = Vector2.INF
 	return obstacle_hit(sim, a, b, 0.0, ignore) == INF
 
-static func move_actor(sim: GameSim, from, to, radius) -> Variant:
+static func move_actor(sim: GameSim, from, to, radius, ignore_scenery: bool = false) -> Variant:
 	# typed all the way (src/world/WorldGeometry.FastMove.cs): every body moves through here every tick
 	var mask: int = door_mask(sim)
 	var f: Vector2 = Vector2(from)
 	var r: float = float(radius)
 	# the sea stops everyone: slide along the coast (src/world/IslandMap.cs)
-	var moved: Vector2 = IslandMap.keep(f, sim.world.move_body_fast(f, IslandMap.keep(f, Vector2(to), r), r, wall_rects(mask)), r)
+	var moved: Vector2 = IslandMap.keep(f, sim.world.move_body_fast(f, IslandMap.keep(f, Vector2(to), r), r, wall_rects(mask), ignore_scenery), r)
 	return collide_fast(moved, r, mask)
 
 static func navigate(sim: GameSim, from, to, radius, outside = null) -> Variant:

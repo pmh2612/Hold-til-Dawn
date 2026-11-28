@@ -22,7 +22,8 @@ func load_combat_art() -> void:
 	combat_info = main.cinfo.get("combat", {})
 
 func combat_animation(skin: String, name_: String) -> Variant:
-	return main.cinfo.get("chars", {}).get(skin, {}).get("combat", {}).get(name_)
+	var art: Dictionary = main.cinfo.get("chars", {}).get(skin, {})
+	return art.get("combat", {}).get(name_, art.get("reactions", {}).get(name_))
 
 # Read the selected stack itself: p[8] only describes weapons and becomes fists for resources/tools.
 static func held_item(p: Array) -> String:
@@ -57,6 +58,20 @@ func draw_player(id, p, foot) -> void:
 		main.draw_line(x + Vector2(4, -4), x + Vector2(-4, 4), NEON_RED, 2)
 		return
 	main.anim.down_time(id, false)
+	var hit = main.anim.hit_reaction(id, p)
+	if hit != null:
+		main.shadow(Vector2(foot), 10.0)
+		if hit[0] == "stunned":
+			self.char_(id, skin, Vector2(foot), float(hit[3]), 1.0, Color.WHITE, false, "idle", "idle", 0.0)
+			var head: Vector2 = Vector2(foot) - Vector2(0, 41)
+			main.draw_arc(head, 9, 0, TAU, 16, Color("D3AA58"), 1.0)
+			for i in range(3):
+				var star: Vector2 = head + Vector2(cos(main.clock * 5 + i * TAU / 3) * 10, sin(main.clock * 5 + i * TAU / 3) * 4)
+				main.draw_line(star - Vector2(2, 0), star + Vector2(2, 0), Color("FFF1A8"), 2.0)
+				main.draw_line(star - Vector2(0, 2), star + Vector2(0, 2), Color("FFF1A8"), 2.0)
+			return
+		self.char_(id, skin, Vector2(foot) - Vector2(0, hit[2]), float(hit[3]), 1.0, Color.WHITE, true, hit[0], hit[0], float(hit[1]))
+		return
 	if p[11]:
 		slash_t[id] = main.clock
 	var fighting: bool = main.clock - slash_t.get(id, -9.0) < 0.4

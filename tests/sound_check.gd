@@ -201,6 +201,24 @@ func check_new_audio(audio: Sound) -> void:
 	host.clock += 1
 	audio.from_snap(exact)
 	check(audio.sound_last.craft_done == host.clock, "successful craft completion comes from its actual event")
+	exact.audio.append([4,"boss_slam",Vector2.ZERO,-101])
+	host.clock += 2
+	audio.music_duck_until = 0
+	audio.from_snap(exact)
+	check(audio.sound_last.get("boss_slam", -1) == host.clock and audio.music_duck_until > host.clock and audio.world_priority.has(2), "Ground impact is a critical sound that ducks the music")
+	var heard: float = float(audio.sound_last.get("boss_slam", -1))
+	host.clock += 1
+	audio.from_snap(exact)
+	check(audio.sound_last.get("boss_slam", -1) == heard, "Repeated snapshots do not replay the slam impact")
+	exact.audio.append([5,"boss_charge",Vector2.ZERO,-101])
+	host.clock += 2
+	audio.music_duck_until = 0
+	audio.from_snap(exact)
+	check(audio.sound_last.get("boss_charge", -1) == host.clock and audio.music_duck_until > host.clock and audio.world_priority.has(2), "Juggernaut charge gets a protected voice and ducks the music")
+	var charge_heard: float = float(audio.sound_last.get("boss_charge", -1))
+	host.clock += 1
+	audio.from_snap(exact)
+	check(audio.sound_last.get("boss_charge", -1) == charge_heard, "Repeated snapshots do not replay the rush sound")
 	var crafting := base.duplicate(true)
 	crafting.audio = []
 	crafting.ps[1][26] = 8

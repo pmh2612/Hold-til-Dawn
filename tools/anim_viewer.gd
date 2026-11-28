@@ -70,6 +70,17 @@ func _ready() -> void:
 					for region in direction:
 						attack.bounds = attack.bounds.merge(Rect2(-Vector2(region[4], region[5]), Vector2(region[2], region[3])))
 				s.anims.append(attack)
+			for n in c.get("reactions", {}):
+				var clip: Dictionary = c.reactions[n]
+				var reaction := Anim.new()
+				reaction.name = n
+				reaction.count = int(clip.count)
+				reaction.fps = float(clip.fps)
+				reaction.regions = clip.rows
+				for direction in clip.rows:
+					for region in direction:
+						reaction.bounds = reaction.bounds.merge(Rect2(-Vector2(region[4], region[5]), Vector2(region[2], region[3])))
+				s.anims.append(reaction)
 			for n in c.get("held", {}):
 				var clip: Dictionary = c.held[n]
 				var held := Anim.new()

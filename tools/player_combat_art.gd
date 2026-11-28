@@ -60,6 +60,15 @@ func _ready() -> void:
 						frames.append(pack_frame(make_held_pose(skin, item, row, mode, pose)))
 					rows.append(frames)
 				held_clips["hold_%s_%s" % ["empty" if item == "" else item, mode]] = {"item": item, "fps": 2.0 if mode == "idle" else 10.0, "count": 2 if mode == "idle" else 4, "rows": rows}
+		var reactions: Dictionary = {}
+		for reaction in ["hit_launch", "hit_knockback"]:
+			var rows: Array = []
+			for row in range(8):
+				var frames: Array = []
+				for pose in range(POSES):
+					frames.append(pack_frame(make_reaction_pose(skin, reaction, row, pose)))
+				rows.append(frames)
+			reactions[reaction] = {"count": POSES, "fps": POSES / (0.7 if reaction == "hit_launch" else 0.55), "rows": rows}
 		var height: int = ceili((cursor.y + shelf + 2) / 64.0) * 64
 		var atlas := Image.create_empty(ATLAS_WIDTH, height, false, Image.FORMAT_RGBA8)
 		atlas.blit_rect(original_band, Rect2i(Vector2i.ZERO, original_band.get_size()), Vector2i.ZERO)
@@ -71,9 +80,11 @@ func _ready() -> void:
 			return
 		info.chars[skin].combat = clips
 		info.chars[skin].held = held_clips
+		info.chars[skin].reactions = reactions
 		info.chars[skin].atlas = [ATLAS_WIDTH, height]
 		print("INTEGRATED COMBAT ART OK: %s / 9 attacks x 8 directions x 6 poses / %dx%d" % [skin, ATLAS_WIDTH, height])
 		print("HELD ITEM ART OK: %s / %d selections x 8 directions x (2 idle + 4 walk) / %dx%d" % [skin, held_items.size(), ATLAS_WIDTH, height])
+		print("HIT REACTION ART OK: %s / 2 reactions x 8 directions x 6 poses" % skin)
 	var file := FileAccess.open("res://art/chars/chars.json", FileAccess.WRITE)
 	file.store_string(JSON.stringify(info, "\t"))
 	file.close()
@@ -269,6 +280,54 @@ func make_pose(skin: String, weapon: String, row: int, pose: int) -> Image:
 		result.flip_x()
 		flipped.blit_rect(result, Rect2i(0, 0, CANVAS - 1, CANVAS), Vector2i(1, 0))
 		return flipped
+	return result
+
+func make_reaction_pose(skin: String, reaction: String, row: int, pose: int) -> Image:
+	var view: String = PixelChars.VIEWS[row]
+	var dir := Vector2.from_angle(PixelPoses.facing(view))
+	var body: Image = painter.compose(skin, view, false, true)
+	var rig = PixelChars.rig("human", view, painter.palette(skin))
+	body.fill_rect(rig.erase_main, Color.TRANSPARENT)
+	body.fill_rect(rig.erase_off, Color.TRANSPARENT)
+	if rig.patch.size != Vector2i.ZERO:
+		body.fill_rect(rig.patch, rig.patch_col)
+	var fold: int = [0, 1, 3, 3, 2, 0][pose]
+	body = PixelPoses.kneel(body, int(PixelChars.HUMAN.legs), fold)
+	var image := Image.create_empty(CANVAS, CANVAS, false, Image.FORMAT_RGBA8)
+	var torso: Image = PixelPoses.embed(body, 48)
+	var origin: Vector2 = FOOT - Vector2(16, 29)
+	var layer := Image.create_empty(CANVAS, CANVAS, false, Image.FORMAT_RGBA8)
+	var spread: float = [2.0, 5.0, 8.0, 7.0, 4.0, 1.0][pose]
+	var lift: float = [0.0, -4.0, -8.0, -6.0, -2.0, 1.0][pose] if reaction == "hit_launch" else [0.0, -3.0, -5.0, -4.0, -1.0, 1.0][pose]
+	var shoulder: Vector2 = origin + rig.main + Vector2(0, fold)
+	var off: Vector2 = origin + rig.off + Vector2(0, fold)
+	arm(layer, shoulder, shoulder + Vector2(spread, lift), rig)
+	arm(layer, off, off + Vector2(-spread, lift + 1), rig)
+	if view.begins_with("up"):
+		outline_over(image, layer)
+		outline_over(image, image_at(torso, FOOT - Vector2(24, 37)))
+	else:
+		outline_over(image, image_at(torso, FOOT - Vector2(24, 37)))
+		outline_over(image, layer)
+	# Bake the backward tilt into each complete sprite using nearest-pixel sampling, never a runtime filter.
+	var degrees: float = -dir.x * ([0.0, 12.0, 22.0, 17.0, 8.0, 0.0][pose] if reaction == "hit_knockback" else [0.0, 5.0, -4.0, 3.0, 1.0, 0.0][pose])
+	var centre: Vector2 = FOOT - Vector2(0, 15)
+	var rotated := Image.create_empty(CANVAS, CANVAS, false, Image.FORMAT_RGBA8)
+	var bounds: Rect2i = image.get_used_rect().grow(14)
+	for y in range(bounds.position.y, bounds.end.y):
+		for x in range(bounds.position.x, bounds.end.x):
+			var source: Vector2 = (Vector2(x, y) - centre).rotated(-deg_to_rad(degrees)) + centre
+			rotated.set_pixel(x, y, image.get_pixel(roundi(source.x), roundi(source.y)))
+	if row in PixelChars.MIRRORED:
+		var flipped := Image.create_empty(CANVAS, CANVAS, false, Image.FORMAT_RGBA8)
+		rotated.flip_x()
+		flipped.blit_rect(rotated, Rect2i(0, 0, CANVAS - 1, CANVAS), Vector2i(1, 0))
+		return flipped
+	return rotated
+
+func image_at(source: Image, at: Vector2) -> Image:
+	var result := Image.create_empty(CANVAS, CANVAS, false, Image.FORMAT_RGBA8)
+	result.blit_rect(source, Rect2i(Vector2i.ZERO, source.get_size()), Vector2i(at))
 	return result
 
 func arm(image: Image, shoulder: Vector2, hand: Vector2, rig) -> void:

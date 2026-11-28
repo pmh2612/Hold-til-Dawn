@@ -40,7 +40,7 @@ func _ready() -> void:
 		var padded_cell: int = cell + GUTTER * 2
 		var body := 48 if is_boss else 40 if kind == "wrecker" else 32
 		var ground := 46.0 if is_boss or kind == "wrecker" else 37.0
-		var columns: int = 32 if kind == "juggernaut" else 14
+		var columns: int = 32 if kind == "juggernaut" else 38 if kind == "broodmother" else 14
 		var sheet := Image.create_empty(padded_cell * columns * resolution, padded_cell * 8 * resolution, false, Image.FORMAT_RGBA8)
 		var header := "<svg xmlns='http://www.w3.org/2000/svg' width='%d' height='%d' viewBox='0 0 %d %d'>" % [cell * resolution, cell * resolution, cell, cell]
 		var materials := definitions()
@@ -62,7 +62,9 @@ func _ready() -> void:
 			return
 		var metadata := {"size": padded_cell * resolution, "body": body * resolution, "anchor": [(cell / 2.0 + GUTTER) * resolution, (ground + GUTTER) * resolution], "resolution": resolution, "gutter": GUTTER * resolution, "smooth": false, "pixel_art": true, "anims": {"attack": [6, 4, 10.0], "down": [10, 4, 8.0]}}
 		if kind == "juggernaut":
-			metadata.anims.merge({"slam_wind": [14, 6, 6.0], "slam_hit": [20, 4, 16.0], "charge_wind": [24, 4, 4.0], "charge_run": [28, 4, 16.0]})
+			metadata.anims.merge({"slam_wind": [14, 6, 4.0], "slam_hit": [20, 4, 4.0 / 0.65], "charge_wind": [24, 4, 4.0], "charge_run": [28, 4, 16.0]})
+		elif kind == "broodmother":
+			metadata.anims.merge({"sweep_wind": [14, 6, 6.0 / 0.8], "sweep_hit": [20, 6, 6.0 / 0.35], "chain_wind": [26, 4, 4.0 / 0.55], "chain_cast": [30, 4, 12.0], "chain_pull": [34, 4, 8.0]})
 		bosses.chars[name_] = metadata
 		generated += 1
 		poses += columns * 8
@@ -85,7 +87,7 @@ func definitions() -> String:
 		"grunt", "juggernaut": colours = ["#f0a06b", "#a64732", "#502e2b"]
 		"spitter", "bio_cannon": colours = ["#a4bd76", "#527047", "#263c32"]
 		"wrecker", "ironhide": colours = ["#a4b8c4", "#526e84", "#2b3c4f"]
-		"broodmother": colours = ["#d99da9", "#924a69", "#412d45"]
+		"broodmother": colours = ["#c3b58c", "#81765a", "#393f43"] # Chainwarden, legacy atlas key
 		"burrower": colours = ["#dfbc78", "#987044", "#4d3b30"]
 		"gatebreaker": colours = ["#c6a17a", "#806044", "#41372f"]
 		_: colours = ["#c2eff1", "#70a9bf", "#354d73"]
@@ -135,6 +137,8 @@ func pixel_palette(image: Image) -> void:
 	image.set_data(image.get_width(), image.get_height(), false, Image.FORMAT_RGBA8, bytes)
 
 func frame(angle: float, col: int, scale_: float, cx: float, ground: float) -> String:
+	if kind == "broodmother":
+		return chainwarden_frame(angle, col)
 	if kind == "juggernaut" and col >= 14:
 		return juggernaut_skill_frame(angle, col)
 	parts = PackedStringArray()
@@ -204,6 +208,59 @@ func frame(angle: float, col: int, scale_: float, cx: float, ground: float) -> S
 	if col >= 10:
 		parts.append("</g>")
 	parts.append("</g></g></svg>")
+	return "".join(parts)
+
+func chainwarden_frame(angle: float, col: int) -> String:
+	parts = PackedStringArray()
+	facing = angle
+	side = absf(cos(angle))
+	back = sin(angle) < -0.25
+	dark_eyes = col == 13
+	pose = 0
+	var w: float = lerpf(1.0, 0.74, side)
+	var stride: float = 1.0 if col == 2 else -1.0 if col == 4 else 0.0
+	var wind: bool = col >= 14 and col < 20
+	var sweep: bool = col >= 20 and col < 26
+	var throwing: bool = col >= 26 and col < 34
+	var pulling: bool = col >= 34
+	var progress: float = (col - 14) / 5.0 if wind else (col - 20) / 5.0 if sweep else (col - 26) / 7.0 if throwing else (col - 34) / 3.0 if pulling else (col - 6) / 3.0 if col in range(6, 10) else 0.0
+	parts.append("<g clip-path='url(#cell)'>")
+	ell(Vector2(24, 46), Vector2(18, 2), "shadow", 0)
+	if col in range(10, 14):
+		var death: Array = ["rotate(-9 24 44)", "translate(3 9) scale(.88 .8)", "translate(14 43) rotate(48) scale(.64 .72) translate(-24 -46)", "translate(11 44) rotate(80) scale(.38 .72) translate(-24 -46)"]
+		parts.append("<g transform='%s'>" % death[col - 10])
+	legs(w, stride, true)
+	var lean: float = cos(angle) * (-7 * progress if wind else 7 * (1 - progress) if sweep else -5 * progress if pulling else 0)
+	parts.append("<g transform='rotate(%.3f 24 38)'>" % lean)
+	ell(Vector2(24, 28), Vector2(10.5 * w, 11), "under", .7)
+	path("M 17 21 L 31 21 L 32 34 L 24 38 L 16 34 Z", "steel", INK, .8)
+	for sign_ in [-1.0, 1.0]:
+		ell(Vector2(24 + sign_ * 10 * w, 22), Vector2(4 * w, 4), "steel", .6)
+		var root: Vector2 = Vector2(24 + sign_ * 10 * w, 23)
+		var a: float = angle + (-1.3 if wind else lerpf(-1.3, 1.3, progress) if sweep or col in range(6, 10) else 0.0)
+		var reach: float = 10 if sweep else lerpf(2, 11, progress) if throwing else lerpf(11, 3, progress) if pulling else 3
+		var hand: Vector2 = (root + Vector2(cos(a) * reach, 7 + sin(a) * reach * .5)).clamp(Vector2(4, 6), Vector2(44, 40))
+		limb(root, root.lerp(hand, .5) + Vector2(sign_ * 2, 0), hand, 2.7, "skin")
+		ell(hand, Vector2(3, 2.5), "steel", .5)
+		if sign_ > 0:
+			var tip: Vector2 = (hand + Vector2(cos(a) * (11 if sweep else 7), sin(a) * 7 + (0 if throwing else 5))).clamp(Vector2(3, 3), Vector2(45, 44))
+			for i in range(5):
+				var at: Vector2 = hand.lerp(tip, i / 4.0)
+				ell(at, Vector2(1.2, .8), "steel", .45)
+			path("M %.2f %.2f l 3 -1 l 0 4 l -3 1 Z" % [tip.x - 1, tip.y - 2], "bone", INK, .5)
+	# Masked iron jailer: shoulder chains replace the former egg sacs entirely.
+	for i in range(5):
+		ell(Vector2(18 + i * 3, 27 + sin(i * .8) * 4), Vector2(1.4, .9), "steel", .5)
+	head(w)
+	path("M 19 13 L 29 13 L 28 20 L 20 20 Z", "steel", INK, .55)
+	if not back:
+		line([Vector2(20, 15), Vector2(28, 15)], "#ffd579", 1.0)
+		for x in [22, 25, 28]:
+			line([Vector2(x, 17), Vector2(x, 19)], INK, .7)
+	parts.append("</g>")
+	if col in range(10, 14):
+		parts.append("</g>")
+	parts.append("</g>")
 	return "".join(parts)
 
 func juggernaut_skill_frame(angle: float, col: int) -> String:

@@ -41,6 +41,21 @@ func check_combat_assets() -> void:
 		var image := Image.load_from_file("res://art/chars/%s.png" % skin)
 		total_pixels += image.get_width() * image.get_height()
 		check(image.get_width() == int(chars.chars[skin].atlas[0]) and image.get_height() == int(chars.chars[skin].atlas[1]), skin + " uses one character PNG for walking, farming and all attacks")
+		for name_ in ["hit_launch", "hit_knockback"]:
+			var reaction: Dictionary = chars.chars[skin].reactions[name_]
+			var complete: bool = reaction.rows.size() == 8 and int(reaction.count) == 6
+			for direction in reaction.rows:
+				var hashes: Dictionary = {}
+				complete = complete and direction.size() == 6
+				for region in direction:
+					var rect := Rect2i(region[0], region[1], region[2], region[3])
+					complete = complete and Rect2i(Vector2i.ZERO, image.get_size()).encloses(rect)
+					var pose: Image = image.get_region(rect)
+					var used: Rect2i = pose.get_used_rect()
+					complete = complete and used.has_area() and used.position.x >= 2 and used.position.y >= 2 and used.end.x <= rect.size.x - 2 and used.end.y <= rect.size.y - 2
+					hashes[hash(pose.get_data())] = true
+				complete = complete and hashes.size() >= 4
+			check(complete, skin + " / " + name_ + " has six distinct anchored full-body reaction frames in eight directions")
 		for weapon in info.weapons:
 			var clip: Dictionary = chars.chars[skin].combat["combat_" + Cs.s(weapon)]
 			var complete: bool = clip.rows.size() == 8

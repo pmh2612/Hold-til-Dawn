@@ -86,3 +86,19 @@ directions: slam_wind (6), slam_hit (4), charge_wind (4), charge_run (4).
 Authored offline by tools/pixel_enemies.gd --only=juggernaut. The original
 14 columns, six other boss sheets and three regular enemies are preserved.
 Runtime selects these atlas clips from the authoritative special timing.
+
+Player hit-reaction sprites
+---------------------------
+Each role PNG includes hit_launch and hit_knockback: six complete character
+poses, eight directions, 288 poses across Scout, Healer and Engineer.
+Authored offline by tools/player_combat_art.gd using the original role body
+and palette, with flailing arms, bent knees and a baked backward tilt.
+chars.json per-role reactions index the packed poses. Runtime adds the
+vertical rise/fall above a ground shadow; existing combat, held-item and
+walking/harvesting pixels and their atlas coordinates are preserved.
+
+Juggernaut slam timing: slam_wind plays its six frames over 1.5 seconds;
+slam_hit holds its four impact/stand-up frames for 0.65 seconds.
+The simulation and renderer share these timings; no additional PNG is loaded.
+
+NOX-02 Chainwarden replaces the old Broodmother design. Its legacy boss_broodmother PNG key is retained for compatibility. Iron mask, shoulder chains, chain flail, sweep and hook/pull poses are authored in tools/pixel_enemies.gd (38 columns, eight facings). Rebuild only this boss with tools/PixelEnemies.tscn -- --only=broodmother.

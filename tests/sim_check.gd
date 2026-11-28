@@ -325,7 +325,7 @@ func check_mechanics() -> void:
 	self.check(every_site, "titanium nodes at all five salvage sites, round their structures")
 	s.k = 2
 	s.active = [1]
-	# a Juggernaut: the Broodmother is slower on purpose (BAL-39)
+	# a Juggernaut: the Chainwarden is slower on purpose (BAL-39)
 	s.boss_plan = [0, 1]
 	s.spawn_boss()
 	var b = s.boss()
@@ -501,7 +501,7 @@ func boss_match(kind: int) -> Variant:
 	s.spawn_boss()
 	var b = s.boss()
 	b.pos = GameSim.DOOR_POS[0] + GameSim.DOOR_DIR[0] * 12 * 32
-	b.slam_cd = 99.0
+	b.special_cd = 99.0
 	for p in s.players.values():
 		p.pos = Vector2(0, -15 * 32)
 	return s
@@ -537,42 +537,32 @@ func check_bosses() -> void:
 		s.spawn_boss()
 		hp.append(roundi(s.boss().maxhp))
 	self.check(hp == [3900, 4680, 3510, 3120, 4290, 3120, 2730], "boss HP per archetype at n = 4 matches table 4.2: " + Cs.s(hp))
-	# Juggernaut: line telegraph, dash, 35 damage and knockback, then a slam and immediate pursuit
+	# Juggernaut: line telegraph, dash, 35 damage and knockback, then pursuit during the shared interval
 	s = self.boss_match(GameSim.JUGGERNAUT)
 	var b = s.boss()
 	var v = s.players[2]
 	v.pos = b.pos + Vector2(0, 6 * 32)
 	b.sig_cd = 0.0
+	b.special_cd = 0.0
+	b.next_skill = "charge"
 	self.run(s, 0.1)
 	self.check(s.tele.any(func(tl): return tl.kind == "line") and b.act == "charge_wind", "Juggernaut shows a line telegraph before its charge")
 	self.check(v.hp == v.maxhp, "nothing is hit during the 1.0 s telegraph")
 	self.run(s, 2.0)
 	self.check(v.hp <= v.maxhp - 35, "the charge hits the player on the line for 35 (hp %d)" % [v.hp])
 	self.run(s, 1.5)
-	self.check(b.act != "recover", "after the dash and slam it resumes hunting without a recovery pause")
-	# Broodmother: 2 Grunts per summon, at most 4, gone with the boss, no drops
-	s = self.boss_match(GameSim.BROODMOTHER)
+	self.check(b.act != "recover", "after the dash it resumes hunting during the shared special interval")
+	# Chainwarden replaces the summoner with a hook and frontal stunning sweep.
+	s = self.boss_match(GameSim.CHAINWARDEN)
 	b = s.boss()
-	self.check(absf(b.spd - 0.75 * 2.16 * 32) < 0.01, "Broodmother moves at 0.75 x Grunt speed")
+	self.check(absf(b.spd - 0.75 * 2.16 * 32) < 0.01, "Chainwarden retains its slower movement speed")
 	b.spd = 0.0
-	b.sig_cd = 0.0
-	self.run(s, 1.1)
-	var summons = func(): return s.enemies.filter(func(e): return e.get("summon", false)).size()
-	self.check(summons.call() == 2, "Broodmother summons 2 Grunts after a 1.0 s glow")
-	b.sig_cd = 0.0
-	self.run(s, 1.1)
-	b.sig_cd = 0.0
-	self.run(s, 1.1)
-	self.check(summons.call() == 4, "never more than 4 summons alive")
-	var killer = s.players[1]
-	killer.pos = b.pos + Vector2(40, 0)
-	killer.aim = PI
-	b.hp = 1.0
-	s.hit(b, 10, killer)
-	s.drops.clear()
-	s.phase = "day"
-	s.tick_enemies(0.016)
-	self.check(summons.call() == 0 and s.drops.is_empty(), "summons vanish with the Broodmother and drop nothing")
+	b.special_cd = 0.0
+	s.players[2].pos = b.pos + Vector2(0, 3 * 32)
+	self.run(s, 0.1)
+	self.check(b.act == "chain_wind", "Chainwarden opens with a hook wind-up")
+	self.run(s, 1.5)
+	self.check(not s.enemies.any(func(e): return e.get("summon", false)), "Chainwarden never summons Grunts")
 	# Bio-Cannon: a ring of 8 projectiles
 	s = self.boss_match(GameSim.BIO_CANNON)
 	b = s.boss()

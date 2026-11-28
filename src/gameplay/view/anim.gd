@@ -21,6 +21,22 @@ var main: Main
 func _init(host: Main) -> void:
 	main = host
 
+static func hit_height(kind: String, progress: float) -> float:
+	if kind in ["stun", "pull"]:
+		return 0.0
+	return (36.0 if kind == "slam" else 16.0) * sin(PI * clampf(progress, 0, 1))
+
+func hit_reaction(id, p) -> Variant:
+	if int(p[5]) != 0 or main.snap.get("ph", "") == "result":
+		return null
+	var hit = main.snap.get("hit_reactions", {}).get(id)
+	if hit == null:
+		return null
+	var age: float = float(hit[2]) + (0.0 if main.pause_menu.paused else clampf(float(main.clock) - main.hit_snapshot_at, 0, 0.05))
+	var progress: float = clampf(age / float(hit[3]), 0, 1)
+	var clip: String = "stunned" if hit[1] == "stun" else "hit_launch" if hit[1] == "slam" else "hit_knockback"
+	return [clip, age, hit_height(Cs.s(hit[1]), progress), float(p[12]) if hit[1] == "stun" else Vector2(hit[4]).angle() + (0 if hit[1] == "pull" else PI)]
+
 # Legacy snapshots use the swing flag; current snapshots also identify each successful attack.
 # Returns when the latest swing started, or -1 if none was seen yet.
 func swing_start(key_, flag: bool) -> float:

@@ -314,7 +314,7 @@ func generate() -> void:
 	for d in deco:
 		var radius: float = float(variants.get(d[1], [0, 0, 0])[2])
 		if radius > 0:
-			static_solids.append([d[0], radius, true])
+			static_solids.append([d[0], radius, true, charge_blocks_sprite(str(d[1]))])
 	WorldTerrain.add_terrain_solids(self, static_solids)
 	for child in layout.get_children():
 		if child is Sprite2D and child.texture != null:
@@ -329,7 +329,7 @@ func generate() -> void:
 				continue
 			deco.append([child.position, child.texture.resource_path.get_file().get_basename(), child.scale.x, child.modulate])
 			if child.solid_radius > 0:
-				static_solids.append([child.position, child.solid_radius * absf(child.scale.x), child.blocks_attacks])
+				static_solids.append([child.position, child.solid_radius * absf(child.scale.x), child.blocks_attacks, charge_blocks_sprite(sprite)])
 	layout.free()
 	WorldHomeFarms.thin_outside_resources(self)
 	static_solids.append([Vector2(0, 0.3 * T - 6), 22.0, true])
@@ -342,6 +342,15 @@ func generate() -> void:
 static func wall_pieces(pos, vert) -> Variant:
 	var along: Vector2 = Vector2.DOWN if vert else Vector2.RIGHT
 	return [pos - along * T, pos, pos + along * T]
+
+# Collision entry 3 distinguishes construction from scenery; older entries remain solid to a rush.
+static func charge_blocks_sprite(sprite: String) -> bool:
+	if not sprite.begins_with("lm_") or Harvestables.type_of(sprite) >= 0:
+		return false
+	for loose in ["lm_crate", "lm_drum", "lm_rubble", "lm_gear", "lm_cable", "lm_litter", "lm_sack", "lm_roof_fallen"]:
+		if sprite.begins_with(loose):
+			return false
+	return true
 
 func rebuild(nodes, towers, walls = null) -> void:
 	var next = updated_colliders(nodes, towers, walls)
@@ -547,15 +556,15 @@ func updated_colliders(nodes, towers, walls) -> Variant:
 			var p: Vector2 = Vector2(wall.get("pos"))
 			var along: Vector2 = Vector2.DOWN if wall.get("vert") else Vector2.RIGHT
 			for i in range(-1, 2):
-				next_dynamic_colliders.append([p + along * i * 32, WALL_PIECE * 32])
+				next_dynamic_colliders.append([p + along * i * 32, WALL_PIECE * 32, true])
 	for node in nodes:
 		var radius: float = Harvestables.radius(node)
 		if int(node.get("amount")) > 0 and radius > 0:
-			next_dynamic_colliders.append([Vector2(node.get("pos")), radius])
+			next_dynamic_colliders.append([Vector2(node.get("pos")), radius, false])
 	for entry in towers:
 		var tower = entry
 		if entry is Dictionary:
-			next_dynamic_colliders.append([Vector2(tower.get("pos")), 0.7 * 32])
+			next_dynamic_colliders.append([Vector2(tower.get("pos")), 0.7 * 32, true])
 	var same: bool = is_same(previous_static_colliders, static_solids) and previous_static_count == static_solids.size() and is_same(previous_built_colliders, solids) and next_dynamic_colliders.size() == previous_dynamic_colliders.size()
 	if same:
 		for i in range(next_dynamic_colliders.size()):
@@ -570,7 +579,7 @@ func updated_colliders(nodes, towers, walls) -> Variant:
 	for _it1 in next_dynamic_colliders:
 		var pos = _it1[0]
 		var radius = _it1[1]
-		next.append([pos, radius, true])
+		next.append([pos, radius, true, bool(_it1[2])])
 	previous_dynamic_colliders.clear()
 	previous_dynamic_colliders.append_array(next_dynamic_colliders)
 	previous_static_colliders = static_solids
@@ -584,7 +593,7 @@ func mirror_solids() -> void:
 	solid_t = Cs.arr(n, null)
 	for i in range(n):
 		var s = solids[i]
-		solid_t[i] = [Vector2(s[0]), float(s[1])]
+		solid_t[i] = [Vector2(s[0]), float(s[1]), bool(s[3]) if s.size() > 3 else true]
 	seen_t = Cs.arr(n, 0)
 	stamp_t = 0
 	bucket_t.clear()
@@ -618,11 +627,20 @@ func candidates_fast(a: Vector2, b: Vector2, radius: float) -> Variant:
 	return near_t
 
 # Resolve(), typed
-func resolve_fast(pos: Vector2, radius: float) -> Vector2:
+func overlaps_scenery(pos: Vector2, radius: float) -> bool:
+	for i in candidates_fast(pos, pos, radius):
+		var solid = solid_t[i]
+		if not solid[2] and pos.distance_squared_to(solid[0]) < pow(radius + float(solid[1]) - 0.1, 2):
+			return true
+	return false
+
+func resolve_fast(pos: Vector2, radius: float, ignore_scenery: bool = false) -> Vector2:
 	var nearby = candidates_fast(pos, pos, radius + 32.0)
 	for pass_ in range(3):
 		for i in nearby:
 			var _d1 = solid_t[i]
+			if ignore_scenery and not _d1[2]:
+				continue
 			var c = _d1[0]
 			var r = _d1[1]
 			var d: Vector2 = pos - c
@@ -632,12 +650,12 @@ func resolve_fast(pos: Vector2, radius: float) -> Vector2:
 	return pos
 
 # MoveBody(), typed: 4-pixel steps, each pushed out of the scenery and then of the wall pieces
-func move_body_fast(from: Vector2, to: Vector2, radius: float, walls) -> Vector2:
+func move_body_fast(from: Vector2, to: Vector2, radius: float, walls, ignore_scenery: bool = false) -> Vector2:
 	var count: int = maxi(1, ceili(from.distance_to(to) / 4.0))
 	var step: Vector2 = (to - from) / count
 	var pos: Vector2 = from
 	for i in range(count):
-		var next: Vector2 = resolve_fast(pos + step, radius)
+		var next: Vector2 = resolve_fast(pos + step, radius, ignore_scenery)
 		for w in walls:
 			var q: Vector2 = next.clamp(w.position, w.end)
 			var d: Vector2 = next - q

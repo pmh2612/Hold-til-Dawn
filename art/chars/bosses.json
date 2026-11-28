@@ -31,21 +31,46 @@
 			],
 			"anims": {
 				"attack": [
-					6.0,
-					4.0,
+					6,
+					4,
 					10.0
 				],
-				"down": [
-					10.0,
-					4.0,
+				"chain_cast": [
+					30,
+					4,
+					12.0
+				],
+				"chain_pull": [
+					34,
+					4,
 					8.0
+				],
+				"chain_wind": [
+					26,
+					4,
+					7.27272727272727
+				],
+				"down": [
+					10,
+					4,
+					8.0
+				],
+				"sweep_hit": [
+					20,
+					6,
+					17.1428571428571
+				],
+				"sweep_wind": [
+					14,
+					6,
+					7.5
 				]
 			},
-			"body": 144.0,
-			"gutter": 6.0,
+			"body": 144,
+			"gutter": 6,
 			"pixel_art": true,
-			"resolution": 3.0,
-			"size": 156.0,
+			"resolution": 3,
+			"size": 156,
 			"smooth": false
 		},
 		"boss_burrower": {
@@ -127,41 +152,41 @@
 			],
 			"anims": {
 				"attack": [
-					6,
-					4,
+					6.0,
+					4.0,
 					10.0
 				],
 				"charge_run": [
-					28,
-					4,
+					28.0,
+					4.0,
 					16.0
 				],
 				"charge_wind": [
-					24,
-					4,
+					24.0,
+					4.0,
 					4.0
 				],
 				"down": [
-					10,
-					4,
+					10.0,
+					4.0,
 					8.0
 				],
 				"slam_hit": [
-					20,
-					4,
-					16.0
+					20.0,
+					4.0,
+					6.15384615384615
 				],
 				"slam_wind": [
-					14,
-					6,
-					6.0
+					14.0,
+					6.0,
+					4.0
 				]
 			},
-			"body": 144,
-			"gutter": 6,
+			"body": 144.0,
+			"gutter": 6.0,
 			"pixel_art": true,
-			"resolution": 3,
-			"size": 156,
+			"resolution": 3.0,
+			"size": 156.0,
 			"smooth": false
 		},
 		"boss_phantom": {

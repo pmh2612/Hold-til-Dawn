@@ -371,13 +371,25 @@ static func tick_tele(sim: GameSim, dt) -> void:
 	for tl in sim.tele:
 		tl.t -= dt
 		if tl.t <= 0 and tl.dmg > 0:
+			if tl.get("reaction", "") == "slam":
+				var boss_id: int = int(tl.get("boss_id", -1))
+				for boss in sim.enemies:
+					if int(boss.id) == boss_id:
+						boss.slam_at = sim.clock
+						break
+				SimAudio.emit(sim, "boss_slam", Vector2(tl.pos), -boss_id - 1)
 			for p in sim.players.values():
 				var d: Vector2 = Vector2(p.pos - tl.pos)
 				var in_: bool = d.length() <= tl.r
 				if in_ and tl.kind == "arc":
 					in_ = absf(angle_difference(float(tl.ang), d.angle())) <= tl.spread / 2
-				if in_:
+				if in_ and (tl.get("reaction", "") != "stun" or SimWorld.line_clear(sim, tl.pos, p.pos)):
+					var hp_before: float = p.hp
 					SimPlayers.hurt(sim, p, tl.dmg)
+					if p.hp < hp_before and p.state == 0 and tl.get("reaction", "") == "slam":
+						SimPlayers.start_hit_reaction(sim, p, "slam", Vector2(p.pos - tl.pos))
+					elif p.hp < hp_before and p.state == 0 and tl.get("reaction", "") == "stun":
+						SimPlayers.start_hit_reaction(sim, p, "stun", Vector2.ZERO)
 	sim.tele = sim.tele.filter(func(tl): return tl.t > 0)
 
 static func separate(sim: GameSim) -> void:
@@ -422,6 +434,8 @@ static func separate(sim: GameSim) -> void:
 	for _it1 in sim.sep_pairs:
 		var a = _it1[0]
 		var b = _it1[1]
+		if SimBosses.ignores_scenery(sim.enemies[a]) or SimBosses.ignores_scenery(sim.enemies[b]):
+			continue
 		var d: Vector2 = sim.sep_pos[b] - sim.sep_pos[a]
 		var need: float = sim.sep_r[a] + sim.sep_r[b]
 		if d.length_squared() >= need * need:
@@ -434,7 +448,7 @@ static func separate(sim: GameSim) -> void:
 	# Resolve scenery once per body after all pair corrections, not once per pair.
 	for i in range(n):
 		var e = sim.enemies[i]
-		e.pos = SimWorld.move_actor(sim, sim.sep_pos[i], sim.sep_pos[i], sim.sep_r[i])
+		e.pos = SimWorld.move_actor(sim, sim.sep_pos[i], sim.sep_pos[i], sim.sep_r[i], SimBosses.ignores_scenery(e))
 
 static func spawn_pos(sim: GameSim, door, dist_tiles, any_side) -> Variant:
 	return spawn_position(sim, int(door), float(dist_tiles), any_side)

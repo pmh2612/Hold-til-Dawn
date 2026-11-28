@@ -6,6 +6,7 @@ var review_frame: int = 0
 var finished: bool = false
 var interactive: bool = false
 var juggernaut_skills: bool = false
+var chainwarden_skills: bool = false
 var animation_time: float = 0.0
 var names = ["grunt", "spitter", "wrecker", "boss_juggernaut", "boss_broodmother", "boss_bio_cannon", "boss_burrower", "boss_gatebreaker", "boss_phantom", "boss_ironhide"]
 
@@ -14,6 +15,7 @@ func _ready() -> void:
 	Engine.max_fps = 60
 	interactive = "--interactive" in OS.get_cmdline_user_args()
 	juggernaut_skills = "--juggernaut-skills" in OS.get_cmdline_user_args()
+	chainwarden_skills = "--chainwarden-skills" in OS.get_cmdline_user_args()
 	cinfo = JSON.parse_string(FileAccess.get_file_as_string("res://art/chars/chars.json"))
 	var bosses = JSON.parse_string(FileAccess.get_file_as_string("res://art/chars/bosses.json"))
 	cinfo.chars.merge(bosses.chars)
@@ -43,7 +45,7 @@ func _ready() -> void:
 			Cs.fail("Original regular enemy layout was changed: %s" % name)
 			return
 		var sheet = load("res://art/chars/%s.png" % [name]).get_image()
-		var columns: int = 32 if name == "boss_juggernaut" else 14
+		var columns: int = 32 if name == "boss_juggernaut" else 38 if name == "boss_broodmother" else 14
 		if sheet.get_width() != cell * columns or sheet.get_height() != cell * 8:
 			Cs.fail("Unexpected sheet layout: %s" % [name])
 			return
@@ -115,7 +117,7 @@ func _draw() -> void:
 	player_view.char_("reference", "engineer", Vector2(715, 110), PI / 2, 1.0, Color.WHITE)
 	var shown = {}
 	var cycle: int = int(animation_time * 20) % 240 if interactive else review_frame
-	for i in range(0 if juggernaut_skills else names.size()):
+	for i in range(0 if juggernaut_skills or chainwarden_skills else names.size()):
 		var boss: bool = i >= 3
 		var index: int = i - 3
 		var foot = Vector2(120 + index % 4 * 230, 300 + index / 4 * 200) if boss else Vector2(100 + i * 200, 110)
@@ -128,7 +130,9 @@ func _draw() -> void:
 			enemy_view.draw_enemy(enemy, foot)
 			shown[100 + i] = true
 		draw_string(font, foot + Vector2(-55, 20), names[i].replace("boss_", ""), 13)
-	if juggernaut_skills:
+	if chainwarden_skills:
+		draw_chainwarden_skills()
+	elif juggernaut_skills:
 		draw_juggernaut_skills()
 	else:
 		enemy_view.note_fallen(shown)
@@ -144,7 +148,7 @@ func _draw() -> void:
 		var shot = get_viewport().get_texture().get_image()
 		shot.convert(Image.FORMAT_RGBA8)
 		shot.linear_to_srgb()
-		shot.save_png("res://.tmp/enemy-redesign/rendered/%s-%03d.png" % ["juggernaut" if juggernaut_skills else "frame", captured_frame])
+		shot.save_png("res://.tmp/enemy-redesign/rendered/%s-%03d.png" % ["chainwarden" if chainwarden_skills else "juggernaut" if juggernaut_skills else "frame", captured_frame])
 	if not interactive and review_frame >= 240:
 		finished = true
 		print("ENEMY DESIGN RENDER OK: idle, walk, attacks, wind-ups and corpses across eight directions")
@@ -152,13 +156,25 @@ func _draw() -> void:
 	# catch (Exception E) dropped
 
 func draw_juggernaut_skills() -> void:
-	var progress: float = fposmod(float(clock), 1.0)
 	for row in range(2):
 		for col in range(4):
 			var foot: Vector2 = Vector2(120 + col * 230, 285 + row * 210)
-			var look: String = ["slam", "", "charge_wind", "charge"][col]
-			var left: float = 1.0 - progress if col in [0, 2] else 0.0
-			var age: float = progress * 0.24 if col == 1 else 99.0
+			var look: String = ["slam", "slam_impact", "charge_wind", "charge"][col]
+			var left: float = SimBosses.SLAM_WINDUP - fposmod(float(clock), SimBosses.SLAM_WINDUP) if col == 0 else 1.0 - fposmod(float(clock), 1.0) if col == 2 else 0.0
+			var age: float = fposmod(float(clock), SimBosses.SLAM_IMPACT) if col == 1 else 99.0
 			var enemy: Array = [500 + row * 4 + col, GameSim.BOSS, foot, 100.0, 100.0, 35.2, GameSim.JUGGERNAUT, look, 0.0 if row == 0 else PI / 2, false, false, false, left, age]
 			enemy_view.draw_enemy(enemy, foot)
 			draw_string(ThemeDB.fallback_font, foot + Vector2(-90, 24), ["Slam / raise fists", "Slam / ground impact", "Charge / prepare", "Charge / sprint"][col], 13)
+
+func draw_chainwarden_skills() -> void:
+	for row in range(2):
+		for col in range(5):
+			var foot: Vector2 = Vector2(110 + col * 190, 285 + row * 210)
+			var look: String = ["sweep_wind", "sweep_hit", "chain_wind", "chain_fly", "chain_pull"][col]
+			var duration: float = [SimChainwarden.SWEEP_WIND, SimChainwarden.SWEEP_HIT, SimChainwarden.HOOK_WIND, .4, SimChainwarden.PULL_TIME][col]
+			var left: float = duration - fposmod(float(clock), duration)
+			var enemy: Array = [600 + row * 5 + col, GameSim.BOSS, foot, 100.0, 100.0, 35.2, GameSim.CHAINWARDEN, look, 0.0 if row == 0 else PI / 2, false, false, false, left, 99.0]
+			enemy_view.draw_enemy(enemy, foot)
+			draw_string(ThemeDB.fallback_font, foot + Vector2(-65, 24), ["Sweep / prepare", "Sweep / strike", "Hook / prepare", "Hook / throw", "Hook / pull"][col], 13)
+	snap.chains = [[Vector2(680, 495), Vector2(840, 495), -1]]
+	enemy_view.draw_chains()

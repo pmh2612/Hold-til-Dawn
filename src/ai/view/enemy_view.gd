@@ -15,19 +15,31 @@ static var BOSS_WIND = {"glow": true, "charge_wind": true, "blow": true, "slam":
 # Snapshot fields 12/13 carry remaining special time and elapsed time since the slam landed.
 # These clips contain the whole boss body, not a separate effect over the idle sprite.
 static func boss_skill_animation(e: Array) -> Array:
-	if int(e[1]) != GameSim.BOSS or int(e[6]) != GameSim.JUGGERNAUT:
+	if int(e[1]) != GameSim.BOSS:
 		return []
 	var look: String = Cs.s(e[7])
 	var left: float = float(e[12]) if e.size() > 12 else SimBosses.TELEGRAPH
+	if int(e[6]) == GameSim.CHAINWARDEN:
+		match look:
+			"sweep_wind": return ["sweep_wind", maxf(0, SimChainwarden.SWEEP_WIND - left), false]
+			"sweep_hit": return ["sweep_hit", maxf(0, SimChainwarden.SWEEP_HIT - left), false]
+			"chain_wind": return ["chain_wind", maxf(0, SimChainwarden.HOOK_WIND - left), false]
+			"chain_fly", "chain_return": return ["chain_cast", 0.0, true]
+			"chain_pull": return ["chain_pull", maxf(0, SimChainwarden.PULL_TIME - left), false]
+		return []
+	if int(e[6]) != GameSim.JUGGERNAUT:
+		return []
+	var impact_age: float = float(e[13]) if e.size() > 13 else 99.0
+	if impact_age >= 0 and impact_age < SimBosses.SLAM_IMPACT:
+		return ["slam_hit", impact_age, false]
 	if look == "slam":
-		return ["slam_wind", clampf(SimBosses.TELEGRAPH - left, 0, 0.999), false]
+		return ["slam_wind", clampf(SimBosses.SLAM_WINDUP - left, 0, SimBosses.SLAM_WINDUP - 0.001), false]
+	if look == "slam_impact":
+		return ["slam_hit", maxf(0, SimBosses.SLAM_IMPACT - left), false]
 	if look == "charge_wind":
 		return ["charge_wind", clampf(SimBosses.TELEGRAPH - left, 0, 0.999), false]
 	if look == "charge":
 		return ["charge_run", 0.0, true]
-	var impact_age: float = float(e[13]) if e.size() > 13 else 99.0
-	if impact_age >= 0 and impact_age < 0.25:
-		return ["slam_hit", impact_age, false]
 	return []
 # a dead enemy plays its "down" frames where it fell, lies there, then fades (seconds)
 const CORPSE_TIME: float = 2.4
@@ -119,6 +131,21 @@ func draw_telegraphs() -> void:
 		main.draw_circle(pos, r, Color(1.0, 0.1, 0.3, 0.16))
 		main.draw_circle(pos, r * (1.0 - left), Color(1.0, 0.15, 0.3, 0.35))
 		main.draw_arc(pos, r, 0, TAU, 48, NEON_RED, 3)
+
+func draw_chains() -> void:
+	for chain in main.snap.get("chains", []):
+		var start: Vector2 = Vector2(chain[0]) - Vector2(0, 47) + (Vector2(chain[1]) - Vector2(chain[0])).normalized() * 22
+		var end: Vector2 = Vector2(chain[1]) - Vector2(0, 20)
+		var direction: Vector2 = (end - start).normalized()
+		var side: Vector2 = direction.orthogonal()
+		var links: int = mini(64, maxi(1, ceili(start.distance_to(end) / 7.0)))
+		for i in range(links):
+			var at: Vector2 = start.lerp(end, (i + 0.5) / float(links))
+			var half: float = 2.0 if i % 2 == 0 else 0.8
+			var link := PackedVector2Array([at - direction * 3, at + side * half, at + direction * 3, at - side * half, at - direction * 3])
+			main.draw_polyline(link, Color("17212C"), 3.0)
+			main.draw_polyline(link, Color("BBC8C7"), 1.0)
+		main.draw_polyline(PackedVector2Array([end - direction * 7, end + direction * 4, end + side * 6, end + side * 6 - direction * 5]), Color("E4C67B"), 3.0)
 
 static func arc_fan(c: Vector2, r: float, ang: float, half: float) -> Variant:
 	var pts = Cs.arr(18, Vector2.ZERO)
