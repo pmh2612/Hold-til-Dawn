@@ -35,7 +35,7 @@ func _ready() -> void:
 	sim.unlock = 2
 	var p = sim.players[1]
 	p.pos = GameSim.WORKBENCH_POS + Vector2(0, 24)
-	SimInventory.equip_bag(p, "backpack")
+	SimInventory.equip_bag(p, "cargo_frame")
 	for id in ["wood", "stone", "herb", "titanium"]:
 		sim.set_count(p, id, 30)
 	my_id = 1

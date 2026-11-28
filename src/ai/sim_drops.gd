@@ -35,7 +35,7 @@ static func tick_drops(sim: GameSim, dt) -> void:
 		for p in sim.players.values():
 			# MEC-23: walk over it with free inventory space, never from inside the base
 			if d.ttl > 0 and p.state == 0 and not SimWorld.inside_base(p.pos) and p.pos.distance_to(d.pos) <= 0.8 * T and SimInventory.room(sim, p, d.item) > 0:
-				var left: int = SimInventory.add_to(p.inv, d.item, int(d.n))
+				var left: int = SimInventory.add_to_player(p.inv, d.item, int(d.n))
 				SimPlayers.note(sim, p, "+%d %s" % [d.n - left, SimInventory.item_name(d.item)])
 				d.n = left
 				if left == 0:

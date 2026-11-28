@@ -9,7 +9,7 @@ const ATLAS_WIDTH: int = 2304
 const HELD_WEAPON_SCALE: float = 0.5
 # Kept explicit so this offline art tool need not initialize the entire island simulation.
 # CombatReadabilityCheck verifies exact coverage against GameSim.ITEMS and COMPONENT_IDS.
-const HELD_ITEMS := ["", "wood", "stone", "herb", "titanium", "bandage", "arrow", "revive", "long_spear", "stun_maul", "vine_trap", "poison_flask", "healing_flask", "haste_tonic", "chest_key", "explosive_arrow", "repair_kit", "stone_spear", "titanium_blade", "starter_bow", "bow", "hammer", "light_armour", "stone_armour", "titanium_armour", "battery_cells", "antenna_assembly", "locator_circuit", "backpack"]
+const HELD_ITEMS := ["", "wood", "stone", "herb", "titanium", "bandage", "arrow", "revive", "long_spear", "stun_maul", "vine_trap", "poison_flask", "healing_flask", "haste_tonic", "chest_key", "explosive_arrow", "repair_kit", "stone_spear", "titanium_blade", "starter_bow", "bow", "hammer", "light_armour", "stone_armour", "titanium_armour", "battery_cells", "antenna_assembly", "locator_circuit", "cargo_frame"]
 const RADIO_PARTS := ["battery_cells", "antenna_assembly", "locator_circuit"]
 # Pull back beside the torso, drive outward along the aim, then return along that same line.
 # Grip and head translate together: the weapon stays rigid throughout the six poses.
@@ -142,7 +142,7 @@ func make_held_pose(skin: String, item: String, row: int, mode: String, pose: in
 		layer = compact_held_weapon(layer, grip)
 	elif item != "":
 		var icon: Image = held_item_image(item)
-		var bulky: bool = item in ["wood", "stone", "titanium", "revive", "repair_kit", "vine_trap", "light_armour", "stone_armour", "titanium_armour", "backpack"]
+		var bulky: bool = item in ["wood", "stone", "titanium", "revive", "repair_kit", "vine_trap", "light_armour", "stone_armour", "titanium_armour", "cargo_frame"]
 		var centre: Vector2 = FOOT + Vector2(0, -9 + bounce) + dir * 6 + side * (9 if view.begins_with("up") else 3)
 		layer.blend_rect(icon, Rect2i(Vector2i.ZERO, icon.get_size()), Vector2i((centre - Vector2(icon.get_size()) / 2).round()))
 		grip = centre - side * 4 + Vector2(0, 3)

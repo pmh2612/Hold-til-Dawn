@@ -77,6 +77,7 @@ func run() -> void:
 	check(s.exploration_chests.size() == 20 and s.exploration_chests.filter(func(c): return c.landmark > 4).size() == 10, "20 chests, ten at expedition landmarks and ten scattered")
 	var p = s.players[1]
 	var q = s.players[2]
+	var dst_slot: int = 4
 	for c in Array(s.exploration_chests.filter(func(c): return c.component >= 0)).duplicate():
 		p.pos = c.pos
 		p.inter = true
@@ -86,15 +87,15 @@ func run() -> void:
 			var a = c.slots[i]
 			return c.slots[i] is Array and GameSim.COMPONENT_IDS.find(Cs.s(a[0])) >= 0
 		)[0]
-		# TODO(cs2gd): pattern variable A bound from a complex expression (check evaluation order)
-		s.move_slot(p, ["chest:" + str(c.id), slot, "inv", 0])
-	check(s.supplies_got() == 3 and not s.supplies_all_in(), "finding parts requires assembling the radio")
+		s.move_slot(p, ["chest:" + str(c.id), slot, "inv", dst_slot])
+		dst_slot += 1
+	check(s.supplies_got() == 3 and not s.supplies_all_in(), "finding parts requires bringing and assembling them at the radio")
 	s.dawn()
 	check(s.supplies_got() == 3, "radio parts persist through dawn")
 	p.pos = GameSim.RADIO_POS + Vector2(0, 24)
-	s.action(p.id, "radio_open", null)
+	s.action(p.id, "radio_insert", -1)
 	s.try_build_radio(p, 5.1)
-	check(s.radio_built and s.radio_parts_placed.count(1) == 3, "radio is assembled at its own table with three installed parts")
+	check(s.radio_built and s.radio_parts_placed.count(1) == 3, "radio is assembled at its own table after inserting three carried parts")
 	s.k = 5
 	s.night()
 	s.t = 0.0

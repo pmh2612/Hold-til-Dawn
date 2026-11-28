@@ -143,9 +143,11 @@ func draw_supply_row(c, right: float, y: float) -> void:
 	c.draw_rect(box_, SUPPLY_COL, false, 1)
 	main.text(cw, box_.position + Vector2(6, 13), "LOCATOR RADIO", 10, Color.LIGHT_GREEN if built else SUPPLY_COL)
 	for i in range(3):
+		var installed: bool = int(rescue[3][i]) > 0
 		var found: bool = int(rescue[0][i]) > 0
 		var slot = Rect2(box_.position + Vector2(6 + i * 74, 19), Vector2(70, 22))
-		c.draw_rect(slot, ExpeditionSitesView.ep("285637") if found else ExpeditionSitesView.ep("30363D"))
+		var bg: Color = ExpeditionSitesView.ep("285637") if installed else ExpeditionSitesView.ep("7A5E22") if found else ExpeditionSitesView.ep("30363D")
+		c.draw_rect(slot, bg)
 		draw_component_icon(c, i, slot.get_center(), 1)
 	var progress: float = float(rescue[2])
 	if progress > 0:

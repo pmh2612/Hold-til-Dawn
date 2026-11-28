@@ -101,27 +101,77 @@ static func room_in(slots, id) -> int:
 			room_ += QUIVER - loaded(s)
 	return room_
 
-# Adds up to N; returns what did not fit. Arrows go into a bow first; then it tops up existing stacks, then
-# fills empty slots.
-static func add_to(slots, id, n: int) -> int:
-	var stack: int = stack_of(id)
-	if id == "arrow":
-		n = load_arrows(slots, n)
-	var i: int = 0
-	while i < slots.size() and n > 0:
+static func prefers_inner_bag(id) -> bool:
+	var k = kind_of(id)
+	return k == "res" or k == "quest"
+
+static func _top_up_range(slots, id, n: int, stack: int, start: int, end: int) -> int:
+	var i: int = start
+	while i < end and n > 0:
 		var s = slots[i]
-		if s != null and s[0] == id and s[1] < stack:
+		if s != null and s[0] == id and int(s[1]) < stack:
 			var put: int = mini(n, stack - int(s[1]))
 			slots[i] = [id, int(s[1]) + put]
 			n -= put
 		i += 1
-	i = 0
-	while i < slots.size() and n > 0:
+	return n
+
+static func _fill_empty_range(slots, id, n: int, stack: int, start: int, end: int) -> int:
+	var i: int = start
+	while i < end and n > 0:
 		if slots[i] == null:
 			var put: int = mini(n, stack)
 			slots[i] = [id, put]
 			n -= put
 		i += 1
+	return n
+
+# Adds up to N into a generic container (chest/storage); returns what did not fit.
+static func add_to(slots, id, n: int) -> int:
+	var stack: int = stack_of(id)
+	if id == "arrow":
+		n = load_arrows(slots, n)
+	n = _top_up_range(slots, id, n, stack, 0, slots.size())
+	n = _fill_empty_range(slots, id, n, stack, 0, slots.size())
+	return n
+
+# Adds up to N into a player's inventory with hotbar priority:
+# - Weapons and equipment/usable gear go into hotbar slots 1-4 (0..HOTBAR-1) first, even shifting a raw
+#   resource out of the hotbar into a free inner-bag slot when needed.
+# - Raw resources (wood, stone, herb, titanium) and quest parts go into inner-bag slots (HOTBAR..end) first,
+#   only spilling into the hotbar when the inner bag has no room left.
+static func add_to_player(slots, id, n: int) -> int:
+	var stack: int = stack_of(id)
+	if id == "arrow":
+		n = load_arrows(slots, n)
+	var hot: int = mini(GameSim.HOTBAR, slots.size())
+	if prefers_inner_bag(id):
+		n = _top_up_range(slots, id, n, stack, hot, slots.size())
+		n = _fill_empty_range(slots, id, n, stack, hot, slots.size())
+		n = _top_up_range(slots, id, n, stack, 0, hot)
+		n = _fill_empty_range(slots, id, n, stack, 0, hot)
+		return n
+	n = _top_up_range(slots, id, n, stack, 0, hot)
+	n = _top_up_range(slots, id, n, stack, hot, slots.size())
+	n = _fill_empty_range(slots, id, n, stack, 0, hot)
+	# If hotbar is full of raw resources while inner bag has an empty slot, move a resource inward so gear lands on 1-4.
+	var i: int = 0
+	while i < hot and n > 0:
+		var s = slots[i]
+		if s != null and prefers_inner_bag(s[0]):
+			var free_bag: int = -1
+			for j in range(hot, slots.size()):
+				if slots[j] == null:
+					free_bag = j
+					break
+			if free_bag < 0:
+				break
+			slots[free_bag] = s
+			var put: int = mini(n, stack)
+			slots[i] = [id, put]
+			n -= put
+		i += 1
+	n = _fill_empty_range(slots, id, n, stack, hot, slots.size())
 	return n
 
 # Removes N if there are that many (from the last slots first); otherwise removes nothing. Arrows come out of
@@ -172,7 +222,7 @@ static func add_item(sim: GameSim, p, id, n) -> void:
 	if kind_of(id) == "armour":
 		p.armour = maxi(int(p.armour), GameSim.ARMOUR_ITEMS.find(id))
 		return
-	var left: int = add_to(p.inv, id, int(n))
+	var left: int = add_to_player(p.inv, id, int(n))
 	load_bows(p.inv)
 	if left > 0:
 		player_drop(sim, p.pos, id, left)
@@ -181,7 +231,7 @@ static func add_item(sim: GameSim, p, id, n) -> void:
 # Sets how many of an item a player carries (tests and debug).
 static func set_count(sim: GameSim, p, id, n) -> void:
 	take_from(p.inv, id, count(sim, p, id))
-	add_to(p.inv, id, int(n))
+	add_to_player(p.inv, id, int(n))
 
 static func give_starting_kit(sim: GameSim, p) -> void:
 	# Team change to BAL-42: no basic weapon item; everyone fights bare-handed when the selected slot holds
@@ -249,19 +299,40 @@ static func inventory_box(sim: GameSim, p, box) -> Variant:
 	var c = SimSupplies.chest_by_id(sim, id)
 	return c.slots if SimSupplies.can_access_chest(sim, p, c) else null
 
-# Drag and drop between the inventory ("inv") and storage ("sto"): swaps, or merges equal stacks.
+# Drag and drop between the inventory ("inv"), storage ("sto"), chests ("chest:N"), or radio ("radio"): swaps or merges.
+static func _sync_chest_component(sim: GameSim, box: String) -> void:
+	if not box.begins_with("chest:"):
+		return
+	var chest = SimSupplies.chest_by_id(sim, box.substr(6).to_int())
+	if chest == null:
+		return
+	chest.component = -1
+	for s in chest.slots:
+		if s != null:
+			var comp: int = GameSim.COMPONENT_IDS.find(Cs.s(s[0]))
+			if comp >= 0:
+				chest.component = comp
+				return
+
 static func move_slot(sim: GameSim, p, arg) -> void:
 	if p.state != 0 or not arg is Array or arg.size() < 4:
 		return
 	var from_box = Cs.s(arg[0])
 	var to_box = Cs.s(arg[2])
+	var a: int = int(arg[1])
+	var b: int = int(arg[3])
+	if from_box == "inv" and to_box == "radio":
+		if a < 0 or a >= p.inv.size() or p.inv[a] == null:
+			return
+		var comp: int = GameSim.COMPONENT_IDS.find(Cs.s(p.inv[a][0]))
+		if comp >= 0:
+			SimSupplies.insert_radio_part(sim, p, comp)
+		return
 	var from = inventory_box(sim, p, from_box)
 	var to = inventory_box(sim, p, to_box)
 	if from == null or to == null:
 		SimPlayers.note(sim, p, "Out of reach")
 		return
-	var a: int = int(arg[1])
-	var b: int = int(arg[3])
 	if a < 0 or a >= from.size() or b < 0 or b >= to.size() or from_box == to_box and a == b:
 		return
 	var sa = from[a]
@@ -269,17 +340,6 @@ static func move_slot(sim: GameSim, p, arg) -> void:
 	if sa == null:
 		return
 	var component: int = GameSim.COMPONENT_IDS.find(Cs.s(sa[0]))
-	if component >= 0 and from_box.begins_with("chest:") and to_box == "inv":
-		var chest = SimSupplies.chest_by_id(sim, from_box.substr(6).to_int())
-		from[a] = null
-		chest.component = -1
-		sim.rescue_components[component] = 1
-		SimPlayers.say(sim, "%d/3 - %s" % [SimSupplies.supplies_got(sim), GameSim.SUPPLY_NAMES[component]])
-		sim.msg_t = 3
-		return  # team part is selected explicitly but never displaces a bag item, even when full
-	# A radio part cannot be swapped into a backpack or another container by the reverse direction.
-	if component >= 0 or sb != null and GameSim.COMPONENT_IDS.find(Cs.s(sb[0])) >= 0:
-		return
 	if to_box == "inv" and kind_of(sa[0]) == "bag":
 		if GameSim.BAG_ITEMS.find(sa[0]) > int(p.get("bag_tier", 0)):
 			from[a] = null
@@ -310,6 +370,12 @@ static func move_slot(sim: GameSim, p, arg) -> void:
 		return
 	from[a] = sb
 	to[b] = sa
+	_sync_chest_component(sim, from_box)
+	_sync_chest_component(sim, to_box)
+	SimSupplies.sync_rescue_components(sim)
+	if component >= 0 and from_box.begins_with("chest:") and to_box == "inv":
+		SimPlayers.say(sim, "%d/3 - %s (bring to radio)" % [SimSupplies.supplies_got(sim), GameSim.SUPPLY_NAMES[component]])
+		sim.msg_t = 3.5
 	load_bows(p.inv)
 
 # G: hand the selected stack to the nearest teammate in reach (1.5 tiles), otherwise drop it (MEC-09).
@@ -327,20 +393,22 @@ static func give_or_drop(sim: GameSim, p) -> void:
 	p.inv[sel] = null
 	var arrows_: int = loaded(s)
 	if best != null:
-		var left: int = add_to(best.inv, s[0], int(s[1]))
+		var left: int = add_to_player(best.inv, s[0], int(s[1]))
 		if left > 0:
 			p.inv[sel] = s if is_bow(s) else [s[0], left]
 		elif arrows_ > 0:
 			# the bow's arrows go with it: into its new owner's bows or bag, the rest at their feet
-			var over: int = add_to(best.inv, "arrow", arrows_)
+			var over: int = add_to_player(best.inv, "arrow", arrows_)
 			if over > 0:
 				player_drop(sim, best.pos, "arrow", over)
+		SimSupplies.sync_rescue_components(sim)
 		SimPlayers.note(sim, p, "%s to %s" % [item_name(s[0]), best.name])
 		SimPlayers.note(sim, best, "%s: +%s" % [p.name, item_name(s[0])])
 		return
 	player_drop(sim, p.pos, s[0], s[1])
 	if arrows_ > 0:
 		player_drop(sim, p.pos, "arrow", arrows_)
+	SimSupplies.sync_rescue_components(sim)
 
 # Items dropped by players stay until someone picks them up with E (MEC-09).
 static func player_drop(sim: GameSim, pos, id, n) -> void:
@@ -351,12 +419,13 @@ static func player_drop(sim: GameSim, pos, id, n) -> void:
 static func pick_up(sim: GameSim, p) -> bool:
 	for d in sim.drops:
 		if d.get("player", false) and d.pos.distance_to(p.pos) <= 1.2 * T:
-			var left: int = add_to(p.inv, d.item, int(d.n))
+			var left: int = add_to_player(p.inv, d.item, int(d.n))
 			if left == int(d.n):
 				SimPlayers.note(sim, p, "Bag full")
 				return true
 			d.n = left
 			sim.drops = sim.drops.filter(func(x): return x.n > 0)
 			load_bows(p.inv)
+			SimSupplies.sync_rescue_components(sim)
 			return true
 	return false

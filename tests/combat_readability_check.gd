@@ -115,7 +115,9 @@ func check_combat_assets() -> void:
 func check_held_assets(chars: Dictionary) -> void:
 	var items: Array = [""]
 	items.append_array(GameSim.ITEMS.keys())
-	items.append_array(GameSim.COMPONENT_IDS)
+	for comp in GameSim.COMPONENT_IDS:
+		if not items.has(comp):
+			items.append(comp)
 	check(int(chars.held.version) == 1 and chars.held.items.size() == items.size() and items.all(func(item): return chars.held.items.has(item)), "held sprites cover every inventory item, all three radio components and empty hands")
 	for skin in ["scout", "healer", "engineer"]:
 		var image := Image.load_from_file("res://art/chars/%s.png" % skin)

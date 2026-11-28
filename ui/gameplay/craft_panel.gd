@@ -267,6 +267,22 @@ func craft_bag_mouse(vs: Vector2, mouse: Vector2, pressed: bool) -> bool:
 		return true
 	return false
 
+func radio_part_card(vs: Vector2, i: int) -> Rect2:
+	var p = craft_panel_rect(vs)
+	var lw: float = craft_left_w(p)
+	var cw: float = floorf((lw - 16) / 3)
+	return Rect2(p.position + Vector2(20 + i * (cw + 8), HEAD_H + 14), Vector2(cw, 152))
+
+func radio_carried_unplaced(me) -> Array:
+	var out: Array = []
+	var rescue = main.snap.get("rescue", null)
+	if rescue == null or me == null:
+		return out
+	for i in range(3):
+		if int(rescue[3][i]) == 0 and InventoryUi.carried(me, GameSim.COMPONENT_IDS[i]) > 0:
+			out.append(i)
+	return out
+
 func radio_block(me) -> String:
 	var rescue = main.snap.get("rescue", null)
 	if rescue == null or me == null:
@@ -289,7 +305,13 @@ func radio_block(me) -> String:
 
 func repair_radio() -> void:
 	var me = main.snap.get("ps", {}).get(main.my_id)
-	if main.craft_open and radio_mode and radio_block(me) == "":
+	var rescue = main.snap.get("rescue", null)
+	if not main.craft_open or not radio_mode or me == null or rescue == null or rescue[1]:
+		return
+	if int(me[5]) == 0 and main.inventory.in_base_local(me) and SimWorld.near_radio(Vector2(main.local_pos)) and not radio_carried_unplaced(me).is_empty():
+		main.act("radio_insert", -1)
+		return
+	if radio_block(me) == "":
 		main.act("radio_repair")
 
 func draw_radio_panel(c, vs: Vector2, me) -> void:
@@ -297,23 +319,33 @@ func draw_radio_panel(c, vs: Vector2, me) -> void:
 	if rescue == null:
 		return
 	var p = craft_panel_rect(vs)
+	var mouse: Vector2 = Vector2(main.hud.get_local_mouse_position())
+	var carried_parts: Array = radio_carried_unplaced(me)
+	var at_station: bool = int(me[5]) == 0 and main.inventory.in_base_local(me) and SimWorld.near_radio(Vector2(main.local_pos))
 	c.draw_rect(p, Color("101219"))
 	c.draw_rect(p, GOLD, false, 1.5)
 	main.text(c, p.position + Vector2(20, 28), "LOCATOR RADIO", 18, GOLD, 0, -1, true)
 	main.text(c, p.position + Vector2(p.size.x - 132, 28), "C / ESC: CLOSE", 11, Color.WHITE)
 	c.draw_line(p.position + Vector2(16, HEAD_H - 8), Vector2(p.end.x - 16, p.position.y + HEAD_H - 8), Color(1, 1, 1, 0.15), 1)
-	var lw: float = craft_left_w(p)
-	var cw: float = floorf((lw - 16) / 3)
 	for i in range(3):
-		var card = Rect2(p.position + Vector2(20 + i * (cw + 8), HEAD_H + 28), Vector2(cw, 142))
-		var placed: bool = rescue[3][i] > 0
-		c.draw_rect(card, Color("1D302A") if placed else Color("171C24"))
-		c.draw_rect(card, Color("7FD38A") if placed else Color("50565E"), false, 1.5)
-		SuppliesView.draw_component_icon(c, i, card.position + Vector2(cw / 2, 42), 3)
-		main.text(c, card.position + Vector2(0, 94), GameSim.SUPPLY_NAMES[i], 11, Color.WHITE, 1, cw)
-	main.text(c, p.position + Vector2(20, 262), "%d / 3 PARTS" % [rescue[3].count(1)], 14, GOLD, 0, -1, true)
-	main.text(c, p.position + Vector2(20, 290), "Parts: island chests", 11, Color.WHITE)
-	main.text(c, p.position + Vector2(20, p.size.y - 28), "Deadline: night 5", 11, GOLD)
+		var card: Rect2 = radio_part_card(vs, i)
+		var placed: bool = int(rescue[3][i]) > 0
+		var have: bool = carried_parts.has(i)
+		var hover: bool = have and at_station and card.has_point(mouse)
+		var fill_col: Color = Color("1D302A") if placed else (Color("3B311B") if hover else Color("282214")) if have else Color("171C24")
+		var edge_col: Color = Color("7FD38A") if placed else GOLD if have else Color("50565E")
+		c.draw_rect(card, fill_col)
+		c.draw_rect(card, edge_col, false, 2.0 if have else 1.5)
+		SuppliesView.draw_component_icon(c, i, card.position + Vector2(card.size.x / 2, 42), 3)
+		main.text(c, card.position + Vector2(0, 94), GameSim.SUPPLY_NAMES[i], 11, Color.WHITE, 1, card.size.x)
+		var state_txt: String = "INSTALLED" if placed else "CLICK TO INSERT" if have else "MISSING"
+		var state_col: Color = Color("7FD38A") if placed else GOLD if have else Color(1, 1, 1, 0.45)
+		main.text(c, card.position + Vector2(0, 124), state_txt, 10, state_col, 1, card.size.x, true)
+	main.text(c, p.position + Vector2(20, 240), "%d / 3 INSTALLED" % [rescue[3].count(1)], 14, GOLD, 0, -1, true)
+	var hint_line: String = "Click part, drag from bag, or press E to insert" if not carried_parts.is_empty() else "Find parts in island chests & bring them here"
+	main.text(c, p.position + Vector2(20, 266), hint_line, 11, GOLD if not carried_parts.is_empty() else Color(1, 1, 1, 0.78))
+	main.text(c, p.position + Vector2(20, 290), "Deadline: night 5", 11, Color(1, 1, 1, 0.65))
+	draw_craft_bag(c, vs, me, mouse)
 	var d = craft_detail(p)
 	c.draw_line(Vector2(d.position.x - 12, d.position.y), Vector2(d.position.x - 12, d.end.y), Color(1, 1, 1, 0.15), 1)
 	var icon = Rect2(d.position, Vector2(96, 96))
@@ -322,15 +354,18 @@ func draw_radio_panel(c, vs: Vector2, me) -> void:
 	SuppliesView.draw_supply_icon(c, 0, icon.get_center(), 4)
 	main.text(c, d.position + Vector2(110, 23), "Locator radio", 17, Color.WHITE, 0, -1, true)
 	main.text(c, d.position + Vector2(0, 132), "Repair: 5s | Day only", 13, GOLD)
-	main.text(c, d.position + Vector2(0, 159), "Stay still; damage cancels", 11, Color.WHITE)
+	main.text(c, d.position + Vector2(0, 159), "Insert all 3 parts first", 11, Color.WHITE)
+	main.text(c, d.position + Vector2(0, 178), "Stay still; damage cancels", 11, Color(1, 1, 1, 0.78))
 	var b = craft_button(vs)
 	var progress: float = float(rescue[2])
-	var blocked: String = radio_block(me)
-	c.draw_rect(b, GOLD if blocked == "" else Color("33383F"))
+	var can_insert: bool = not rescue[1] and at_station and not carried_parts.is_empty()
+	var blocked: String = "" if can_insert else radio_block(me)
+	var active_btn: bool = blocked == ""
+	c.draw_rect(b, (GOLD.lightened(0.12) if active_btn and b.has_point(mouse) else GOLD) if active_btn else Color("33383F"))
 	if progress > 0:
 		c.draw_rect(Rect2(b.position, Vector2(b.size.x * progress, b.size.y)), GOLD)
-	var label: String = "REPAIRING %d%%" % [int(progress * 100)] if progress > 0 else "E: REPAIR" if blocked == "" else blocked.to_upper()
-	main.text(c, b.position + Vector2(0, 25), label, 13, INK if blocked == "" else Color.WHITE, 1, b.size.x, true)
+	var label: String = "REPAIRING %d%%" % [int(progress * 100)] if progress > 0 else ("E: INSERT PARTS" if carried_parts.size() > 1 else "E: INSERT PART") if can_insert else "E: REPAIR" if blocked == "" else blocked.to_upper()
+	main.text(c, b.position + Vector2(0, 25), label, 13, INK if active_btn else Color.WHITE, 1, b.size.x, true)
 
 func draw_craft_card(c, me, i: int, card: Rect2, mouse: Vector2, busy: int) -> void:
 	var r = GameSim.RECIPES[i]
@@ -453,15 +488,35 @@ func craft_box(c, r: Rect2, id, count, edge: Color) -> void:
 func craft_mouse(ev) -> bool:
 	if not main.craft_open or ev.button_index != 1:
 		return false
+	var vs: Vector2 = Vector2(main.hud.size)
+	var mouse: Vector2 = Vector2(main.hud.get_local_mouse_position())
 	if radio_mode:
-		if ev.pressed and craft_button(Vector2(main.hud.size)).has_point(main.hud.get_local_mouse_position()):
-			repair_radio()
+		var drag = main.inventory.drag_from
+		if not ev.pressed and drag != null:
+			var dropped_on_radio: bool = false
+			for i in range(3):
+				if radio_part_card(vs, i).has_point(mouse):
+					dropped_on_radio = true
+					break
+			if dropped_on_radio:
+				main.act("move_item", ["inv", int(drag[1]), "radio", 0])
+				main.inventory.drag_from = null
+				return true
+		if craft_bag_mouse(vs, mouse, ev.pressed):
+			return true
+		if ev.pressed:
+			var me = main.snap.ps.get(main.my_id)
+			var carried_parts: Array = radio_carried_unplaced(me)
+			for i in range(3):
+				if radio_part_card(vs, i).has_point(mouse) and carried_parts.has(i):
+					main.act("radio_insert", i)
+					return true
+			if craft_button(vs).has_point(mouse):
+				repair_radio()
 		return true
-	if craft_bag_mouse(Vector2(main.hud.size), Vector2(main.hud.get_local_mouse_position()), ev.pressed):
+	if craft_bag_mouse(vs, mouse, ev.pressed):
 		return true
 	if ev.pressed:
-		var vs: Vector2 = Vector2(main.hud.size)
-		var mouse: Vector2 = Vector2(main.hud.get_local_mouse_position())
 		for category in range(3):
 			if craft_category_button(vs, category).has_point(mouse):
 				select_craft_category(category)

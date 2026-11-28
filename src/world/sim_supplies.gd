@@ -8,8 +8,12 @@ const SUPPLY_COUNT: int = 3
 const SUPPLY_PICK: float = 1.1
 const RADIO_BUILD_TIME: float = 5.0
 const CHEST_MIN_SPACING: float = 20.0 * GameSim.T
+const CHEST_BASE_CLEARANCE: float = GameSim.SAFE_D + 3.0 * GameSim.T
 const CHEST_REGIONS: int = 9
 const SCATTER_LANDMARK_CLEARANCE: float = 520.0
+const PART_MIN_PAIR_TILES: float = 42.0
+const PART_FAR_PAIR_TILES: float = 72.0
+const PART_MIN_SPAN_TILES: float = 88.0
 # Count beaches and offshore pier decks too; river banks are not coastline.
 const CHEST_COAST_BAND: float = 10.0 * GameSim.T
 const CHEST_COAST_LIMIT: int = 3
@@ -22,7 +26,27 @@ const CHEST_UNLOCK_TIME = GameSim.CHEST_UNLOCK_TIME
 static func rescue_kind(id) -> int:
 	return RESCUE_IDS.find(id)
 
+static func sync_rescue_components(sim: GameSim) -> void:
+	for i in range(3):
+		if sim.radio_parts_placed[i] > 0:
+			sim.rescue_components[i] = 1
+			continue
+		var part_id: String = GameSim.COMPONENT_IDS[i]
+		var owned: bool = SimInventory.count_in(sim.storage, part_id) > 0
+		if not owned:
+			for p in sim.players.values():
+				if SimInventory.count_in(p.inv, part_id) > 0:
+					owned = true
+					break
+		if not owned:
+			for d in sim.drops:
+				if d.get("item", "") == part_id and int(d.get("n", 0)) > 0:
+					owned = true
+					break
+		sim.rescue_components[i] = 1 if owned else 0
+
 static func supplies_got(sim: GameSim) -> int:
+	sync_rescue_components(sim)
 	var count_: int = 0
 	for n in sim.rescue_components:
 		if n > 0:
@@ -78,13 +102,7 @@ static func place_supplies(sim: GameSim) -> void:
 		support[j] = _t4
 	# Ten distinct landmarks, balanced across the island rather than taking the first ten shuffled sites.
 	# One scattered chest per geographic region; the tenth fills the least populated region.
-	# Parts can still be in any of the twenty chests.
-	var part_chests = range(20)
-	for i in range(19, 0, -1):
-		var j: int = random.randi_range(0, i)
-		var old = part_chests[i]
-		part_chests[i] = part_chests[j]
-		part_chests[j] = old
+	# Radio parts are assigned after all twenty chests are positioned so they stay well spread apart.
 	for i in range(20):
 		var c = ExplorationChest.new()
 		c.id = i
@@ -108,11 +126,79 @@ static func place_supplies(sim: GameSim) -> void:
 		# Named sites always get one support; scattered sites have a 35% chance. Eight slots suffice.
 		if i < 10 or random.randf() < 0.35:
 			SimInventory.add_to(c.slots, support[i % support.size()], 1)
-		var part: int = part_chests.find(i)
-		if part < 3:
-			c.component = part
-			SimInventory.add_to(c.slots, GameSim.COMPONENT_IDS[part], 1)
 		sim.exploration_chests.append(c)
+	assign_radio_parts(sim, random)
+
+# Weighted random selection of 3 distinct chests for the radio parts:
+# strongly favours wide separation across 3 distinct island regions, keeps nearby pairs rare,
+# and rejects clustered triples so players never find all 3 parts in 3 adjacent chests.
+static func assign_radio_parts(sim: GameSim, random) -> void:
+	var n: int = sim.exploration_chests.size()
+	if n < 3:
+		return
+	var chest_regions: Array = []
+	for c in sim.exploration_chests:
+		chest_regions.append(chest_region(c.pos))
+	var triples: Array = []
+	var weights: Array = []
+	var total_w: float = 0.0
+	var fallback: Array = [0, 1, 2]
+	var fallback_min: float = -1.0
+	for a in range(n - 2):
+		var pa: Vector2 = sim.exploration_chests[a].pos
+		var ra: int = chest_regions[a]
+		for b in range(a + 1, n - 1):
+			var pb: Vector2 = sim.exploration_chests[b].pos
+			var dab: float = pa.distance_to(pb) / GameSim.T
+			var rb: int = chest_regions[b]
+			for c_idx in range(b + 1, n):
+				var pc: Vector2 = sim.exploration_chests[c_idx].pos
+				var dac: float = pa.distance_to(pc) / GameSim.T
+				var dbc: float = pb.distance_to(pc) / GameSim.T
+				var min_d: float = minf(dab, minf(dac, dbc))
+				var max_d: float = maxf(dab, maxf(dac, dbc))
+				if min_d > fallback_min:
+					fallback_min = min_d
+					fallback = [a, b, c_idx]
+				if min_d < PART_MIN_PAIR_TILES or max_d < PART_MIN_SPAN_TILES:
+					continue
+				var rc: int = chest_regions[c_idx]
+				var distinct_r: int = 1
+				if rb != ra:
+					distinct_r += 1
+				if rc != ra and rc != rb:
+					distinct_r += 1
+				var w: float = 0.0
+				if min_d >= PART_FAR_PAIR_TILES and distinct_r == 3:
+					var spread: float = min_d / PART_FAR_PAIR_TILES
+					w = 120.0 * spread * spread * spread
+				elif min_d >= 58.0 and distinct_r >= 2:
+					w = 4.0
+				else:
+					w = 0.25
+				triples.append([a, b, c_idx])
+				weights.append(w)
+				total_w += w
+	var chosen: Array = fallback
+	if total_w > 0.0:
+		var roll: float = random.randf() * total_w
+		var acc: float = 0.0
+		for i in range(triples.size()):
+			acc += weights[i]
+			if roll <= acc or i == triples.size() - 1:
+				chosen = triples[i]
+				break
+	# Randomize which of the three chosen chests holds which component.
+	var perm: Array = chosen.duplicate()
+	for i in range(2, 0, -1):
+		var j: int = random.randi_range(0, i)
+		var tmp = perm[i]
+		perm[i] = perm[j]
+		perm[j] = tmp
+	for part in range(3):
+		var chest = sim.exploration_chests[perm[part]]
+		chest.component = part
+		SimInventory.add_to(chest.slots, GameSim.COMPONENT_IDS[part], 1)
 
 static func chest_region(at: Vector2) -> int:
 	var local: Vector2 = (at - IslandMap.box.position) / IslandMap.box.size
@@ -215,6 +301,8 @@ static func chest_spot(sim: GameSim, l, angle: float) -> Vector2:
 
 static func chest_spot_free(sim: GameSim, at: Vector2, scenery) -> bool:
 	# Reject cheap distance / water checks before scanning the full artwork and resource caches.
+	if SimWorld.wall_dist(at) < CHEST_BASE_CLEARANCE:
+		return false
 	if nearest_chest_distance_squared(sim, at) < CHEST_MIN_SPACING * CHEST_MIN_SPACING:
 		return false
 	if coastal_chest(at) and coastal_chest_count(sim) >= CHEST_COAST_LIMIT:
@@ -373,13 +461,25 @@ static func chest_contents_snapshot(sim: GameSim) -> Variant:
 static func at_radio(sim: GameSim, p) -> bool:
 	return SimPlayers.in_base_to_work(sim, p) and SimWorld.near_radio(Vector2(p.pos))
 
-static func place_radio_parts(sim: GameSim, p) -> void:
-	if sim.radio_built or p.state != 0 or not at_radio(sim, p) or sim.phase != "day":
-		return
-	# C opens the station and transfers found quest parts into its three permanent slots.
-	for i in range(3):
-		if sim.rescue_components[i] > 0 and sim.radio_parts_placed[i] == 0:
+static func insert_radio_part(sim: GameSim, p, part_idx: int = -1) -> int:
+	if sim.radio_built or p.state != 0 or not at_radio(sim, p):
+		return 0
+	var indices: Array = [part_idx] if part_idx >= 0 and part_idx < 3 else [0, 1, 2]
+	var placed: int = 0
+	for i in indices:
+		if sim.radio_parts_placed[i] == 0 and SimInventory.take(sim, p, GameSim.COMPONENT_IDS[i], 1):
 			sim.radio_parts_placed[i] = 1
+			sim.rescue_components[i] = 1
+			placed += 1
+	if placed > 0:
+		sync_rescue_components(sim)
+		SimAudio.emit(sim, "craft_done", GameSim.RADIO_POS, p.id)
+		SimPlayers.say(sim, "Radio: %d/3 parts installed" % [sim.radio_parts_placed.count(1)])
+		sim.msg_t = 3.5
+	return placed
+
+static func place_radio_parts(sim: GameSim, p) -> void:
+	insert_radio_part(sim, p, -1)
 
 static func try_build_radio(sim: GameSim, p, dt: float) -> bool:
 	if sim.radio_built or p.state != 0 or not at_radio(sim, p):
@@ -422,6 +522,7 @@ static func supply_snapshot(sim: GameSim) -> Variant:
 	return rows
 
 static func rescue_snapshot(sim: GameSim) -> Variant:
+	sync_rescue_components(sim)
 	return [sim.rescue_components.duplicate(), sim.radio_built, sim.radio_build_t / RADIO_BUILD_TIME, sim.radio_parts_placed.duplicate()]
 
 class ExplorationChest:

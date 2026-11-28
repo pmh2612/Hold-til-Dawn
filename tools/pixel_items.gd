@@ -98,6 +98,7 @@ static func add_tactical_art() -> void:
 	items["haste_tonic"] = [[".....wwww.......", ".....vvvv.......", ".....M..M.......", "....MM..MM......", "...MaaaaaaM.....", "...MaaYYaam.....", "...MaYYaaam.....", "...MaYYYYam.....", "...MaaaYaam.....", "...MaaYaaam.....", "....mmmmmm......"], pal(wood, steel, {"a": "EDAA49", "Y": "FFF3B4"})]
 	items["explosive_arrow"] = [["............YY..", "...........YRRR.", "..........hRrRR.", ".........h..rr..", "........h.......", ".......h........", "......h.........", ".....h..........", "....h...........", "..FFh...........", "..fFF...........", "..ff............"], {"h": "C08A50", "Y": "FFE490", "R": "F09145", "r": "A84432", "F": "D9534A", "f": "E8E3C8"}]
 	items["repair_kit"] = [[".....MMMMMM.....", "....M......m....", "..MMMMMMMMMMMM..", ".Mmmmmmmmmmmmmn.", ".MmmYYmmmmmmYmn.", ".MmmYYmmmmmYYmn.", ".MmmmmYYmmYYmmn.", ".MmmmmmYYYYmmmn.", ".MmmmmmmYYmmmmn.", ".Mmmmmmmmmmmmmn.", "..nnnnnnnnnnnn.."], pal(steel, {"Y": "F5BC65"})]
+	items["cargo_frame"] = [["...BBBBBBBBBB...", "..BT........Tt..", "..BTWWWWWWWWtT..", "..BTwBwwwwBwtT..", "..SSwTvvvvTwSS..", "..ssWBBBBBBWss..", "..BTWWwSSwWWtT..", "..BTwwsSSswwtT..", "..BTvvvqqvvvtT..", "..SSWWWWWWWWSS..", "..ssvvvvvvvvss..", "..BTBBBBBBBBtT..", "..oo........oo.."], pal(wood, stone, steel, {"B": "D2E6FF", "T": "7FA6F5", "t": "4A6AD8"})]
 	fx["explosive_arrow"] = [["F.........YY.", "fhhhhhhhhhRRR", "F.........rr."], {"F": "D9534A", "f": "E8E3C8", "h": "C08A50", "Y": "FFE490", "R": "F09145", "r": "A84432"}]
 
 static func flask(bright, dark, mark, cross: bool) -> Variant:

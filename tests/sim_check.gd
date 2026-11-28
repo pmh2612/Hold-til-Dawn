@@ -713,7 +713,7 @@ func check_items() -> void:
 	self.check(sc.inv[0][0] == "starter_bow" and he.inv.all(func(x): return x == null) and not he.has("flasks"), "Scout starts with a starter bow; Healer starts empty-handed with no free healing charges")
 	self.check(he.weapon == "fists" and GameSim.WEAPON_STATS["fists"][0] == 15.0, "an empty hand fights bare-handed with the basic weapon's numbers (BAL-08)")
 	s.set_count(eng, "wood", 45)
-	self.check(s.count(eng, "wood") == 45 and eng.inv[2][1] == 20 and s.room(eng, "wood") == 15 + 4 * 20, "stacks hold 20 units")
+	self.check(s.count(eng, "wood") == 45 and eng.inv[4][1] == 20 and eng.inv[5][1] == 20 and eng.inv[1] == null and s.room(eng, "wood") == 15 + 4 * 20, "stacks hold 20 units and raw resources fill inner bag before hotbar")
 	s.set_count(eng, "stone", 200)
 	self.check(s.count(eng, "stone") == 80 and s.room(eng, "herb") == 0, "a full inventory takes no more")
 	var herb = s.nodes.filter(func(n): return n.type == 2)[0]
@@ -773,14 +773,14 @@ func check_items() -> void:
 	eng.pos = Vector2(0, 15 * 32)
 	self.run(s, 2.5)
 	self.check(s.count(eng, "arrow") == 0 and s.count(eng, "wood") == 1 and eng.craft_idx == -1, "leaving the workbench cancels a craft and keeps the materials")
-	# Bow and arrows (MEC-03, BAL-10, BAL-42)
-	s.unlock = 1
+	# Bow and arrows (MEC-03, BAL-10, BAL-42): craftable on Day 1 with wood + stone (no titanium)
+	s.unlock = 0
 	eng.pos = GameSim.WORKBENCH_POS + Vector2(0, 24)
-	s.set_count(eng, "wood", 8)
-	s.set_count(eng, "titanium", 2)
+	s.set_count(eng, "wood", 10)
+	s.set_count(eng, "stone", 4)
 	s.action(1, "craft", 2)
 	self.run(s, 3.1)
-	self.check(s.count(eng, "bow") == 1 and s.count(eng, "arrow") == 0 and s.count(eng, "wood") == 2, "Bow alone costs 6 wood + 2 titanium")
+	self.check(s.count(eng, "bow") == 1 and s.count(eng, "arrow") == 0 and s.count(eng, "wood") == 2 and s.count(eng, "stone") == 0, "Bow alone costs 8 wood + 4 stone on day 1 (no titanium)")
 	s.action(1, "craft", 0)
 	self.run(s, 3.1)
 	self.check(s.count(eng, "arrow") == 5 and s.count(eng, "wood") == 1, "5 arrows cost 1 wood separately")

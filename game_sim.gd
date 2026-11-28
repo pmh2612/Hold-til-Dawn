@@ -20,7 +20,7 @@ static var MODES = ["Easy", "Medium", "Hard"]
 static var MODE_MUL = [[0.75, 0.85, 0.8], [1.0, 1.0, 1.0], [1.25, 1.15, 1.2]]
 static var RES = ["wood", "stone", "herb", "titanium"]
 # Permanent equipment, healing and maintenance are craftable. Tactical buffs/traps are chest loot only.
-static var RECIPES = [["Arrows", {"wood": 1}, 0, "arrow", 5, false], ["Stone spear", {"wood": 8, "stone": 12}, 0, "stone_spear", 1, false], ["Bow", {"wood": 6, "titanium": 2}, 0, "bow", 1, false], ["Long spear", {"wood": 10, "stone": 8}, 0, "long_spear", 1, false], ["Titanium blade", {"wood": 10, "titanium": 20}, 2, "titanium_blade", 1, false], ["Stun maul", {"wood": 8, "titanium": 6}, 2, "stun_maul", 1, false], ["Explosive arrows", {"wood": 3, "stone": 4, "titanium": 2}, 2, "explosive_arrow", 3, false], ["Light armour", {"wood": 6}, 0, "light_armour", 1, false], ["Bandage", {"herb": 2}, 0, "bandage", 1, false], ["Revival kit", {"herb": 4, "titanium": 4}, 0, "revive", 1, false], ["Base repair", {"stone": 5}, 0, "base", 100, true], ["Stone armour", {"wood": 8, "stone": 16}, 0, "stone_armour", 1, false], ["Titanium armour", {"titanium": 24}, 2, "titanium_armour", 1, false], ["Healing flask", {"herb": 6, "titanium": 2}, 0, "healing_flask", 1, false], ["Field repair kit", {"wood": 4, "stone": 3, "titanium": 1}, 0, "repair_kit", 1, true], ["Chest key", {"wood": 2, "stone": 2}, 0, "chest_key", 1, false], ["Hammer", {"wood": 6, "stone": 4}, 0, "hammer", 1, false], ["Backpack", {"wood": 12, "stone": 6, "herb": 6}, 0, "backpack", 1, false]]
+static var RECIPES = [["Arrows", {"wood": 1}, 0, "arrow", 5, false], ["Stone spear", {"wood": 8, "stone": 12}, 0, "stone_spear", 1, false], ["Bow", {"wood": 8, "stone": 4}, 0, "bow", 1, false], ["Long spear", {"wood": 10, "stone": 8}, 0, "long_spear", 1, false], ["Titanium blade", {"wood": 10, "titanium": 20}, 2, "titanium_blade", 1, false], ["Stun maul", {"wood": 8, "titanium": 6}, 2, "stun_maul", 1, false], ["Explosive arrows", {"wood": 3, "stone": 4, "titanium": 2}, 2, "explosive_arrow", 3, false], ["Light armour", {"wood": 6}, 0, "light_armour", 1, false], ["Bandage", {"herb": 2}, 0, "bandage", 1, false], ["Revival kit", {"herb": 4, "titanium": 4}, 0, "revive", 1, false], ["Base repair", {"stone": 5}, 0, "base", 100, true], ["Stone armour", {"wood": 8, "stone": 16}, 0, "stone_armour", 1, false], ["Titanium armour", {"titanium": 24}, 2, "titanium_armour", 1, false], ["Healing flask", {"herb": 6, "titanium": 2}, 0, "healing_flask", 1, false], ["Field repair kit", {"wood": 4, "stone": 3, "titanium": 1}, 0, "repair_kit", 1, true], ["Chest key", {"wood": 2, "stone": 2}, 0, "chest_key", 1, false], ["Hammer", {"wood": 6, "stone": 4}, 0, "hammer", 1, false], ["Cargo frame", {"wood": 12, "stone": 6, "titanium": 2}, 0, "cargo_frame", 1, false]]
 var world = WorldGeometry.new()
 var phase = "lobby"
 var t = 0.0
@@ -182,11 +182,11 @@ var construction = []
 # giving, dropping and picking up (MEC-09, BAL-18, ITM-01..13).
 const INV_SLOTS: int = 8
 const HOTBAR: int = 4
-static var BAG_ITEMS = ["", "backpack"]
+static var BAG_ITEMS = ["", "cargo_frame"]
 static var BAG_BONUS = [0, 4]
 const STORAGE_SLOTS: int = 40
-# id -> [name, stack size, kind]; kind is res, use, ammo, weapon, tool or armour.
-static var ITEMS = {"wood": ["Wood", SimInventory.STACK, "res"], "stone": ["Stone", SimInventory.STACK, "res"], "herb": ["Herb", SimInventory.STACK, "res"], "titanium": ["Titanium", SimInventory.STACK, "res"], "bandage": ["Bandage", SimInventory.STACK, "use"], "arrow": ["Arrow", SimInventory.STACK, "ammo"], "revive": ["Revival kit", 3, "use"], "long_spear": ["Long spear", 1, "weapon"], "stun_maul": ["Stun maul", 1, "weapon"], "vine_trap": ["Vine trap", 5, "use"], "poison_flask": ["Poison flask", 5, "use"], "healing_flask": ["Healing flask", 5, "use"], "haste_tonic": ["Haste tonic", 5, "use"], "chest_key": ["Chest key", 10, "tool"], "explosive_arrow": ["Explosive arrow", 12, "ammo"], "repair_kit": ["Field repair kit", 3, "use"], "stone_spear": ["Stone spear", 1, "weapon"], "titanium_blade": ["Titanium blade", 1, "weapon"], "starter_bow": ["Starter bow", 1, "weapon"], "bow": ["Bow", 1, "weapon"], "hammer": ["Hammer", 1, "weapon"], "light_armour": ["Light armour", 1, "armour"], "stone_armour": ["Stone armour", 1, "armour"], "titanium_armour": ["Titanium armour", 1, "armour"], "backpack": ["Backpack", 1, "bag"]}
+# id -> [name, stack size, kind]; kind is res, use, ammo, weapon, tool, armour, bag or quest.
+static var ITEMS = {"wood": ["Wood", SimInventory.STACK, "res"], "stone": ["Stone", SimInventory.STACK, "res"], "herb": ["Herb", SimInventory.STACK, "res"], "titanium": ["Titanium", SimInventory.STACK, "res"], "bandage": ["Bandage", SimInventory.STACK, "use"], "arrow": ["Arrow", SimInventory.STACK, "ammo"], "revive": ["Revival kit", 3, "use"], "long_spear": ["Long spear", 1, "weapon"], "stun_maul": ["Stun maul", 1, "weapon"], "vine_trap": ["Vine trap", 5, "use"], "poison_flask": ["Poison flask", 5, "use"], "healing_flask": ["Healing flask", 5, "use"], "haste_tonic": ["Haste tonic", 5, "use"], "chest_key": ["Chest key", 10, "tool"], "explosive_arrow": ["Explosive arrow", 12, "ammo"], "repair_kit": ["Field repair kit", 3, "use"], "stone_spear": ["Stone spear", 1, "weapon"], "titanium_blade": ["Titanium blade", 1, "weapon"], "starter_bow": ["Starter bow", 1, "weapon"], "bow": ["Bow", 1, "weapon"], "hammer": ["Hammer", 1, "weapon"], "light_armour": ["Light armour", 1, "armour"], "stone_armour": ["Stone armour", 1, "armour"], "titanium_armour": ["Titanium armour", 1, "armour"], "cargo_frame": ["Cargo frame", 1, "bag"], "battery_cells": ["Radio battery", 1, "quest"], "antenna_assembly": ["Antenna assembly", 1, "quest"], "locator_circuit": ["Locator circuit", 1, "quest"]}
 # id -> [damage, attacks per second, reach or range in tiles, ranged, uses arrows] (BAL-08..10, BAL-42)
 const WEAPON_ATTACK_SPEED: float = 1.5
 const WEAPON_SWING_TIME: float = 0.25 / WEAPON_ATTACK_SPEED
@@ -286,6 +286,9 @@ func remove_player(id) -> void:
 	var leaving = players.get(id, null)
 	if leaving != null:
 		SimSupplies.cancel_chest_unlock(self, leaving)
+		for part_id in COMPONENT_IDS:
+			if SimInventory.take(self, leaving, part_id, 1):
+				SimInventory.player_drop(self, leaving.pos, part_id, 1)
 	players.erase(id)
 	order.erase(id)
 	votes.erase(id)
@@ -358,7 +361,10 @@ func action(id, kind, arg) -> void:
 	elif kind == "craft":
 		SimPlayers.craft(self, p, int(arg))
 	elif kind == "radio_open":
-		SimSupplies.place_radio_parts(self, p)
+		pass  # Opening the radio station panel no longer auto-installs parts; players deposit carried parts explicitly.
+	elif kind == "radio_insert":
+		var part_idx: int = -1 if arg == null else int(arg)
+		SimSupplies.insert_radio_part(self, p, part_idx)
 	elif kind == "radio_repair":
 		SimSupplies.try_build_radio(self, p, 0)
 	elif kind == "tower":

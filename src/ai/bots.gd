@@ -326,15 +326,22 @@ static func waypoint(sim, from, to) -> Variant:
 static func fetch_rescue_by_day(sim, p, dt) -> bool:
 	if p.craft_idx >= 0:
 		return true
-	if not sim.radio_built and sim.supplies_got() == 3:
+	var carrying_part: bool = false
+	for part_id in GameSim.COMPONENT_IDS:
+		if sim.count(p, part_id) > 0:
+			carrying_part = true
+			break
+	if not sim.radio_built and (carrying_part or sim.radio_parts_placed.count(1) == 3):
 		var match_ = sim
-		if match_.radio_builder != null and match_.radio_builder != int(p.id):
+		if not carrying_part and match_.radio_builder != null and match_.radio_builder != int(p.id):
 			return false
 		if not SimSupplies.at_radio(sim, p):
 			move(sim, p, GameSim.RADIO_POS + Vector2(0, 24), dt)
 		else:
-			sim.action(p.id, "radio_open", null)
-			sim.action(p.id, "radio_repair", null)
+			if carrying_part:
+				sim.action(p.id, "radio_insert", -1)
+			if sim.radio_parts_placed.count(1) == 3:
+				sim.action(p.id, "radio_repair", null)
 		return true
 	if sim.radio_built or p.role != 0:
 		return false
@@ -345,7 +352,23 @@ static func fetch_rescue_by_day(sim, p, dt) -> bool:
 			var item = open.slots[i]
 			if item == null or GameSim.COMPONENT_IDS.find(Cs.s(item[0])) < 0:
 				continue
-			s.move_slot(p, ["chest:" + str(open.id), i, "inv", 0])
+			var dst: int = -1
+			for j in range(GameSim.HOTBAR, p.inv.size()):
+				if p.inv[j] == null:
+					dst = j
+					break
+			if dst < 0:
+				for j in range(p.inv.size()):
+					if p.inv[j] == null:
+						dst = j
+						break
+			if dst < 0:
+				for j in range(p.inv.size() - 1, -1, -1):
+					if p.inv[j] != null and SimInventory.kind_of(p.inv[j][0]) == "res":
+						dst = j
+						break
+			if dst >= 0:
+				s.move_slot(p, ["chest:" + str(open.id), i, "inv", dst])
 			return true
 	if s.count(p, "chest_key") == 0:
 		if s.count(p, "wood") >= 2 and s.count(p, "stone") >= 2:

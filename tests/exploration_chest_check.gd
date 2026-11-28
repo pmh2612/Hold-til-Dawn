@@ -26,6 +26,9 @@ func run() -> void:
 	var seen = {}
 	var amounts = {}
 	var smallest_gap: float = INF
+	var smallest_base_dist: float = INF
+	var part_min_pair_tiles: float = INF
+	var far_part_seeds: int = 0
 	var layouts: Array = []
 	var longest_placement_ms: int = 0
 	var most_coastal: int = 0
@@ -46,6 +49,11 @@ func run() -> void:
 		var positions: Array = []
 		var coastal: int = 0
 		for c in s.exploration_chests:
+			var bdist: float = float(SimWorld.wall_dist(c.pos))
+			smallest_base_dist = minf(smallest_base_dist, bdist)
+			if bdist < SimSupplies.CHEST_BASE_CLEARANCE - 0.01:
+				Cs.fail("Seed %d: chest %d is inside central circle (%.2f tiles from base wall)" % [seed_, c.id, bdist / GameSim.T])
+				return
 			if IslandMap.depth(c.pos) <= 10 * GameSim.T:
 				coastal += 1
 			# Compute the region independently of the placement helper.
@@ -75,6 +83,18 @@ func run() -> void:
 		if parts.size() != 3 or Cs.distinct(parts.map(func(c): return c.component)).size() != 3 or Cs.distinct(parts.map(func(c): return c.id)).size() != 3:
 			Cs.fail("Radio parts must belong to three distinct chests")
 			return
+		var pd01: float = parts[0].pos.distance_to(parts[1].pos) / GameSim.T
+		var pd02: float = parts[0].pos.distance_to(parts[2].pos) / GameSim.T
+		var pd12: float = parts[1].pos.distance_to(parts[2].pos) / GameSim.T
+		var pmin: float = minf(pd01, minf(pd02, pd12))
+		var pmax: float = maxf(pd01, maxf(pd02, pd12))
+		part_min_pair_tiles = minf(part_min_pair_tiles, pmin)
+		if pmin < SimSupplies.PART_MIN_PAIR_TILES - 0.01 or pmax < SimSupplies.PART_MIN_SPAN_TILES - 0.01:
+			Cs.fail("Seed %d: radio parts too clustered (min %.1f, max %.1f tiles)" % [seed_, pmin, pmax])
+			return
+		var preg = Cs.distinct(parts.map(func(c): return SimSupplies.chest_region(c.pos)))
+		if pmin >= SimSupplies.PART_FAR_PAIR_TILES and preg.size() == 3:
+			far_part_seeds += 1
 		for c in s.exploration_chests:
 			if excluded_loot.any(func(id): return SimInventory.count_in(c.slots, id) > 0):
 				Cs.fail("Removed armour, medicine or repair loot spawned in seed %d chest %d" % [seed_, c.id])
@@ -116,6 +136,8 @@ func run() -> void:
 			return
 	check(seen.size() == 15 and amounts.size() > 4, "64 seeds: 20 accessible eight-slot chests, ten named / ten scattered, parts visit all named sites and scattered chests")
 	check(smallest_gap >= 20 * GameSim.T, "64 seeds: every chest pair stays at least twenty tiles apart")
+	check(smallest_base_dist >= SimSupplies.CHEST_BASE_CLEARANCE - 0.01 and smallest_base_dist > GameSim.SAFE_D, "64 seeds: no chest spawns inside the central base circle (min %.1f tiles)" % [smallest_base_dist / GameSim.T])
+	check(part_min_pair_tiles >= SimSupplies.PART_MIN_PAIR_TILES - 0.01 and far_part_seeds >= 48, "64 seeds: radio parts spread far apart (min %.1f tiles; %d/64 widely separated across 3 regions)" % [part_min_pair_tiles, far_part_seeds])
 	check(layouts.size() == 64, "64 seeds: all nine island regions have two or three chests and at least one scattered chest")
 	check(layouts.size() == 64 and most_coastal <= 3, "64 seeds: no more than three chests within ten tiles of the sea, including named sites and docks")
 	check(layouts.size() == 64, "64 seeds: no Revival kit, armour, bandage, healing flask or field repair kit in any chest")
@@ -186,18 +208,19 @@ func run() -> void:
 	check(s.count(p, "wood") == wood and SimInventory.count_in(part_chest.slots, "wood") == 0 and s.count(p, "stone") == 0, "dragging takes only the selected stack")
 	s.move_slot(p, ["inv", 4, "chest:" + str(part_chest.id), 0])
 	check(s.count(p, "wood") == 0 and SimInventory.count_in(part_chest.slots, "wood") == wood, "items can be stored back in a chest")
-	p.inv = Array(range(8).map(func(_unused): return ["wood", 20])).duplicate()
+	p.inv = SimInventory.empty_slots(8)
+	p.inv[4] = ["wood", 20]
 	var part_slot: int = range(8).filter(func(i):
 		var a = part_chest.slots[i]
 		return part_chest.slots[i] is Array and Cs.s(a[0]) == GameSim.COMPONENT_IDS[part]
 	)[0]
-	# TODO(cs2gd): pattern variable A bound from a complex expression (check evaluation order)
-	s.move_slot(p, ["chest:" + str(part_chest.id), part_slot, "inv", 0])
-	check(s.rescue_components[part] == 1 and part_chest.component == -1 and s.count(p, "wood") == 160, "explicitly taking a radio part shares it even with a full bag without replacing items")
-	check(s.snapshot().msg == "1/3 - " + GameSim.SUPPLY_NAMES[part], "radio pickup announcement contains only the collected count and component name")
-	s.move_slot(p, ["chest:" + str(part_chest.id), part_slot, "inv", 0])
-	check(s.rescue_components[part] == 1 and SimInventory.count_in(part_chest.slots, "stone") > 0, "repeat drags cannot duplicate parts or take unrelated loot")
+	s.move_slot(p, ["chest:" + str(part_chest.id), part_slot, "inv", 5])
+	check(s.count(p, GameSim.COMPONENT_IDS[part]) == 1 and s.rescue_components[part] == 1 and part_chest.component == -1 and s.count(p, "wood") == 20, "taking a radio part stores it physically in the player's inventory")
+	check(s.snapshot().msg.begins_with("1/3 - " + GameSim.SUPPLY_NAMES[part]), "radio pickup announcement reports the collected count and component name")
+	s.move_slot(p, ["chest:" + str(part_chest.id), part_slot, "inv", 6])
+	check(s.count(p, GameSim.COMPONENT_IDS[part]) == 1 and SimInventory.count_in(part_chest.slots, "stone") > 0, "repeat drags cannot duplicate parts or take unrelated loot")
 	p.inv = SimInventory.empty_slots(8)
+	p.inv[5] = [GameSim.COMPONENT_IDS[part], 1]
 	p.inter = true
 	s.try_loot_chest(p, 10)
 	check(part_chest.opened and s.count(p, "chest_key") == 0, "unlocked chests reopen instantly without another key")
@@ -213,7 +236,8 @@ func run() -> void:
 	s.move_slot(p, ["chest:" + str(other.id), 0, "inv", 0])
 	check(s.count(p, "wood") == 0, "a crafted transfer request cannot bypass the lock")
 	s.move_slot(p, ["nonsense", 0, "inv", 1])
-	check(s.count(p, "wood") == 0, "unknown container names cannot fall back to the backpack")
+	check(s.count(p, "wood") == 0, "unknown container names cannot fall back to the bag")
+	var next_slot: int = 6
 	for c in Array(s.exploration_chests.filter(func(c): return c.component >= 0)).duplicate():
 		p.pos = c.pos
 		s.set_count(p, "chest_key", 1)
@@ -223,13 +247,11 @@ func run() -> void:
 			var a = c.slots[i]
 			return c.slots[i] is Array and GameSim.COMPONENT_IDS.find(Cs.s(a[0])) >= 0
 		)[0]
-		# TODO(cs2gd): pattern variable A bound from a complex expression (check evaluation order)
-		s.move_slot(p, ["chest:" + str(c.id), slot, "inv", 0])
-	check(s.supplies_got() == 3 and not s.radio_built and s.radio_parts_placed.count(1) == 0, "collected parts remain in the team pouch until placed at the radio table")
+		s.move_slot(p, ["chest:" + str(c.id), slot, "inv", next_slot])
+		next_slot += 1
+	check(s.supplies_got() == 3 and not s.radio_built and s.radio_parts_placed.count(1) == 0, "collected parts stay carried in the player's bag until manually placed at the radio table")
 	s.dawn()
-	check(s.supplies_got() == 3 and part_chest.opened and SimInventory.count_in(part_chest.slots, "wood") == wood, "dawn preserves unlocked storage, remaining loot and team parts")
-	s.reset_player(p)
-	check(s.supplies_got() == 3, "parts survive player death and reset")
+	check(s.supplies_got() == 3 and part_chest.opened and SimInventory.count_in(part_chest.slots, "wood") == wood, "dawn preserves unlocked storage, remaining loot and carried radio parts")
 	var helper = s.players[-1]
 	q.pos = GameSim.WORKBENCH_POS + Vector2(0, 24)
 	s.try_build_radio(q, 10)
@@ -237,15 +259,25 @@ func run() -> void:
 	helper.pos = GameSim.RADIO_POS + Vector2(-12, 24)
 	helper.inter = true
 	q.pos = GameSim.RADIO_POS + Vector2(0, 24)
-	s.rescue_components = [1, 0, 0]
+	# Teammate at radio without carrying the parts cannot auto-insert parts held by another player.
 	s.action(helper.id, "radio_open", null)
+	s.action(helper.id, "radio_insert", -1)
+	check(s.radio_parts_placed == [0, 0, 0], "standing at radio without carrying parts never auto-installs parts held elsewhere")
+	# Give helper one part physically, verify radio_open does not auto-insert, and radio_insert does.
+	helper.inv = SimInventory.empty_slots(8)
+	p.inv = SimInventory.empty_slots(8)
+	s.set_count(helper, GameSim.COMPONENT_IDS[0], 1)
+	s.action(helper.id, "radio_open", null)
+	check(s.radio_parts_placed == [0, 0, 0] and s.count(helper, GameSim.COMPONENT_IDS[0]) == 1, "opening the radio panel does not auto-insert carried parts")
+	s.action(helper.id, "radio_insert", -1)
 	s.try_build_radio(helper, 10)
-	check(s.radio_parts_placed == [1, 0, 0] and not s.radio_built and s.radio_build_t == 0, "partial delivery fills one table slot but cannot start assembly")
-	s.rescue_components = [1, 1, 1]
-	s.action(helper.id, "radio_open", null)
+	check(s.radio_parts_placed == [1, 0, 0] and s.count(helper, GameSim.COMPONENT_IDS[0]) == 0 and not s.radio_built and s.radio_build_t == 0, "partial delivery fills one table slot from bag but cannot start assembly")
+	s.set_count(helper, GameSim.COMPONENT_IDS[1], 1)
+	s.set_count(helper, GameSim.COMPONENT_IDS[2], 1)
+	s.action(helper.id, "radio_insert", -1)
 	s.try_build_radio(helper, 1)
 	s.try_build_radio(q, 1)
-	check(s.radio_parts_placed.count(1) == 3 and s.snapshot().rescue[3] == [1, 1, 1], "opening the radio panel deposits available parts and publishes three occupied slots")
+	check(s.radio_parts_placed.count(1) == 3 and s.snapshot().rescue[3] == [1, 1, 1], "inserting carried parts at the radio consumes them from bag and occupies all three slots")
 	check(s.radio_builder == -1 and s.radio_build_t == 1, "negative bot IDs own the channel and a second teammate cannot speed it up")
 	s.set_count(helper, "wood", 1)
 	s.set_count(q, "wood", 1)
@@ -310,11 +342,11 @@ func run() -> void:
 	check(["haste_tonic", "poison_flask", "vine_trap"].all(func(id): return not GameSim.RECIPES.any(func(r): return Cs.s(r[3]) == id)), "speed, poison and traps remain loot only")
 	q.pos = GameSim.WORKBENCH_POS + Vector2(0, 24)
 	q.inv = SimInventory.empty_slots(8)
-	s.unlock = 2
-	s.set_count(q, "wood", 6)
-	s.set_count(q, "titanium", 2)
+	s.unlock = 0
+	s.set_count(q, "wood", 8)
+	s.set_count(q, "stone", 4)
 	s.finish_craft(q, 2)
-	check(s.count(q, "bow") == 1 and s.count(q, "arrow") == 0, "crafting a bow gives no free arrows")
+	check(s.count(q, "bow") == 1 and s.count(q, "arrow") == 0, "crafting a day-one bow needs no titanium and gives no free arrows")
 	s.set_count(q, "wood", 1)
 	s.finish_craft(q, 0)
 	check(s.count(q, "arrow") == 5, "arrows are crafted separately and load into the empty bow")

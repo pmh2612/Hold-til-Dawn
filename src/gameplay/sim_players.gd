@@ -578,7 +578,7 @@ static func interact(sim: GameSim, p, dt) -> void:
 			if p.gather_acc >= 1.0:
 				p.gather_acc = 0.0
 				nd.amount -= 1
-				SimInventory.add_to(p.inv, GameSim.RES[nd.type], 1)
+				SimInventory.add_to_player(p.inv, GameSim.RES[nd.type], 1)
 			return
 	# nothing in reach
 	p.gather_acc = 0.0

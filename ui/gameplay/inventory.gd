@@ -24,7 +24,7 @@ func _init(host: Main) -> void:
 
 func load_item_art() -> void:
 	for id in GameSim.ITEMS:
-		if id == "chest_key":
+		if id == "chest_key" or GameSim.COMPONENT_IDS.has(id):
 			continue  # native pixel icons below
 		# the Revival kit's art is named after the kit, its item id is the recipe's ("revive")
 		item_tex[id] = load(ITEM_ART + ("revival_kit" if id == "revive" else id) + ".png")

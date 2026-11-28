@@ -42,7 +42,7 @@ func draw_interaction_hint(c, vs, me, ph) -> void:
 	# standing at the base furniture
 	if hint == "" and me[5] == 0:
 		if main.inventory.in_base_local(me) and SimWorld.near_radio(Vector2(main.local_pos)):
-			hint = "C: radio"
+			hint = "C: radio (insert parts)" if not main.craft_panel.radio_carried_unplaced(me).is_empty() else "C: radio"
 		elif main.inventory.at_bench_local(me):
 			hint = "C: craft"
 		elif main.inventory.at_storage_local(me):

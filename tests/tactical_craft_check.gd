@@ -119,7 +119,7 @@ func run() -> void:
 	p = sim.players[1]
 	ally = sim.players[2]
 	check_weapon_cadence()
-	check(GameSim.RECIPES.size() == 18 and not GameSim.ITEMS.has("wood_shield"), "18 approved recipes including hammer and backpack, no shield")
+	check(GameSim.RECIPES.size() == 18 and not GameSim.ITEMS.has("wood_shield"), "18 approved recipes including hammer and cargo frame, no shield")
 	for i in range(GameSim.RECIPES.size()):
 		reset()
 		p.pos = GameSim.WORKBENCH_POS + Vector2(0, 24)
