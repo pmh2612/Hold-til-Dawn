@@ -536,7 +536,7 @@ func check_bosses() -> void:
 		s.enemies.clear()
 		s.spawn_boss()
 		hp.append(roundi(s.boss().maxhp))
-	self.check(hp == [3900, 4680, 3510, 3120, 4290, 3120, 2730], "boss HP per archetype at n = 4 matches table 4.2: " + Cs.s(hp))
+	self.check(hp == [4500, 4860, 4140, 3780, 4500, 3780, 4140], "boss HP per archetype at n = 4 matches calibrated FML-02 table: " + Cs.s(hp))
 	# Juggernaut: line telegraph, dash, 35 damage and knockback, then pursuit during the shared interval
 	s = self.boss_match(GameSim.JUGGERNAUT)
 	var b = s.boss()
@@ -711,7 +711,7 @@ func check_items() -> void:
 	var he = s.players[3]
 	self.check(eng.inv.size() == 8 and eng.inv[0][0] == "hammer" and eng.inv.filter(func(x): return x != null).size() == 1, "Engineer starts with only the hammer in 8 slots")
 	self.check(sc.inv[0][0] == "starter_bow" and he.inv.all(func(x): return x == null) and not he.has("flasks"), "Scout starts with a starter bow; Healer starts empty-handed with no free healing charges")
-	self.check(he.weapon == "fists" and GameSim.WEAPON_STATS["fists"][0] == 15.0, "an empty hand fights bare-handed with the basic weapon's numbers (BAL-08)")
+	self.check(he.weapon == "fists" and GameSim.WEAPON_STATS["fists"][0] == 11.0, "an empty hand fights bare-handed with the calibrated basic weapon numbers (BAL-08)")
 	s.set_count(eng, "wood", 45)
 	self.check(s.count(eng, "wood") == 45 and eng.inv[4][1] == 20 and eng.inv[5][1] == 20 and eng.inv[1] == null and s.room(eng, "wood") == 15 + 4 * 20, "stacks hold 20 units and raw resources fill inner bag before hotbar")
 	s.set_count(eng, "stone", 200)
@@ -806,7 +806,7 @@ func check_items() -> void:
 	self.run(s, 0.05)
 	eng.atk = false
 	self.run(s, 1.0)
-	self.check(target.hp == 88.0 and s.count(eng, "arrow") == 9, "an arrow hits an enemy 7.5 tiles away for 12 and uses one arrow (hp %.1f)" % [target.hp])
+	self.check(target.hp == 82.0 and s.count(eng, "arrow") == 9, "an arrow hits an enemy 7.5 tiles away for 18 and uses one arrow (hp %.1f)" % [target.hp])
 	target.pos = eng.pos + Vector2(9 * 32, 0)
 	target.home = target.pos
 	target.wander = target.pos
@@ -814,7 +814,7 @@ func check_items() -> void:
 	self.run(s, 0.05)
 	eng.atk = false
 	self.run(s, 1.0)
-	self.check(target.hp == 88.0, "an arrow stops at its 8-tile range")
+	self.check(target.hp == 82.0, "an arrow stops at its 8-tile range")
 	s.set_count(eng, "arrow", 0)
 	eng.atk = true
 	self.run(s, 1.0)
@@ -843,7 +843,7 @@ func check_items() -> void:
 	self.run(s, 0.05)
 	sc.atk = false
 	self.run(s, 1.0)
-	self.check(target.hp == 76.0, "the Scout's starter bow needs no arrows and hits like the crafted bow (12 damage, 8 tiles; hp %.1f)" % [target.hp])
+	self.check(target.hp == 72.0, "the Scout's starter bow needs no arrows and hits for 10 damage across 8 tiles (hp %.1f)" % [target.hp])
 	# Wall construction was removed; malformed / old requests cannot spend resources.
 	s.set_count(eng, "wood", 10)
 	s.set_count(eng, "stone", 5)

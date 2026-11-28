@@ -34,7 +34,7 @@ static func tick_roamers(sim: GameSim, dt) -> void:
 		# Around unopened chests, spend the same enemy budget on local patrols instead.
 		if sim.exploration_chests.any(func(c): return not c.opened and Vector2(p.pos).distance_squared_to(c.pos) <= CHEST_ACTIVATION_RANGE * CHEST_ACTIVATION_RANGE):
 			continue
-		if sim.rng.randf() < roam_chance(p.pos) * ROAM_MUL * (1.4 if sim.world.swamp_centre.distance_to(Vector2(p.pos)) < 14 * T else 1.0):
+		if sim.rng.randf() < roam_chance(p.pos) * ROAM_MUL * SimBalance.roam_multiplier(int(sim.mode)) * (1.4 if sim.world.swamp_centre.distance_to(Vector2(p.pos)) < 14 * T else 1.0):
 			spawn_roamers(sim, p)
 
 # Activate only approached chests. One birth per interval, including after a long frame.

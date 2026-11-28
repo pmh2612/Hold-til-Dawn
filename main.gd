@@ -354,7 +354,8 @@ func on_snap(d) -> void:
 			var old = prev_php.get(id)
 			if old != null and p[3] < old:
 				var loss: float = float(old - p[3])
-				var is_poison_tick: bool = d.get("poisoned", {}).has(id) and is_equal_approx(loss, SimPlayers.POISON_DAMAGE)
+				var poison_tick_val: float = maxf(1.0, roundf(SimBalance.boss_damage_for(SimPlayers.POISON_DAMAGE, int(d.get("k", 1)), int(d.get("mode", 1)))))
+				var is_poison_tick: bool = d.get("poisoned", {}).has(id) and is_equal_approx(loss, poison_tick_val)
 				self.popup(p[2] - Vector2(0, LIFT), "-%d" % [roundi(loss)], Color("7BF058") if is_poison_tick else NEON_RED, 15)
 				if id == my_id:
 					shake = maxf(shake, 2.5 if is_poison_tick else 7.0)

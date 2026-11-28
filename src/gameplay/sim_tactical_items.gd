@@ -4,6 +4,7 @@ extends RefCounted
 # Part of GameSim (game_sim.gd); in the C# version this was src/gameplay/GameSim.TacticalItems.cs.
 # Rules only: the match state lives on GameSim, passed in as `sim`.
 const MAX_VINE_TRAPS: int = 12
+const EXPLOSIVE_ARROW_DAMAGE: float = 40.0
 
 # constants shared with GameSim
 const ARROW_SPEED = GameSim.ARROW_SPEED
@@ -20,8 +21,12 @@ static func is_tactical_use(id) -> bool:
 
 static func tactical_description(id) -> Variant:
 	if id == "explosive_arrow":
-		return ["Blast DMG 32 | Radius 1.5", "Bow in bag | Select ammo + LMB"]
-	return ["DMG 22 | Reach 2.6", "Hits 2 targets"] if id == "long_spear" else ["DMG 30 | Stun 0.8s"] if id == "stun_maul" else ["Root: 2.5s"] if id == "vine_trap" else ["8 DMG/s | 5s"] if id == "poison_flask" else ["+8 HP/s | 5s"] if id == "healing_flask" else ["Speed +20% | 8s"] if id == "haste_tonic" else ["Hold E 2s: unlock", "Single use"] if id == "chest_key" else ["Blast DMG 32"] if id == "explosive_arrow" else ["+100 HP: door / tower"] if id == "repair_kit" else []
+		return ["Blast DMG %d | Radius 1.5" % int(EXPLOSIVE_ARROW_DAMAGE), "Bow in bag | Select ammo + LMB"]
+	if id == "long_spear":
+		return ["DMG %d | Reach 2.6" % int(GameSim.WEAPON_STATS["long_spear"][0]), "Hits 2 targets"]
+	if id == "stun_maul":
+		return ["DMG %d | Stun 0.8s" % int(GameSim.WEAPON_STATS["stun_maul"][0])]
+	return ["Root: 2.5s"] if id == "vine_trap" else ["8 DMG/s | 5s"] if id == "poison_flask" else ["+8 HP/s | 5s"] if id == "healing_flask" else ["Speed +20% | 8s"] if id == "haste_tonic" else ["Hold E 2s: unlock", "Single use"] if id == "chest_key" else ["+100 HP: door / tower"] if id == "repair_kit" else []
 
 static func player_speed(sim: GameSim, p) -> float:
 	var speed: float = float(SPEED) * (1.2 if int(p.role) == 0 else 1.0) * (1.2 if p.get("haste_until", 0.0) > float(sim.clock) else 1.0)
@@ -67,7 +72,7 @@ static func use_tactical_item(sim: GameSim, p, id, aim_point: Vector2) -> bool:
 		var dir: Vector2 = (aim_point - pos).normalized()
 		if dir == Vector2.ZERO:
 			dir = Vector2.from_angle(float(p.aim))
-		sim.arrows.append({"pos": pos + dir * 0.4 * T, "vel": dir * ARROW_SPEED * T, "dmg": 32.0, "left": 7.6 * T, "owner": p.id, "explosive": true})
+		sim.arrows.append({"pos": pos + dir * 0.4 * T, "vel": dir * ARROW_SPEED * T, "dmg": EXPLOSIVE_ARROW_DAMAGE, "left": 7.6 * T, "owner": p.id, "explosive": true})
 		p.aim = dir.angle()
 		SimPlayers.begin_attack_pose(p, "explosive_arrow", GameSim.WEAPON_SWING_TIME)
 		# Special arrows keep their existing role-neutral cadence, now 50% faster too.
@@ -150,7 +155,7 @@ static func explode_arrow(sim: GameSim, arrow) -> void:
 	if owner != null:
 		for e in sim.enemies:
 			if e.hp > 0 and SimBosses.hittable(sim, e) and Vector2(e.pos).distance_to(at) <= 1.5 * T + float(e.r) and SimWorld.line_clear(sim, at, e.pos):
-				SimPlayers.hit(sim, e, 32.0, owner)
+				SimPlayers.hit(sim, e, EXPLOSIVE_ARROW_DAMAGE, owner)
 	if sim.tactical_areas.size() < MAX_TACTICAL_AREAS:
 		sim.tactical_areas.append({"pos": at, "owner": arrow.owner, "kind": "blast", "until": float(sim.clock) + 0.3, "next": INF})
 
@@ -174,8 +179,9 @@ static func attack_long_spear(sim: GameSim, p) -> void:
 		if SimBosses.hittable(sim, e) and along >= 0 and along <= 2.6 * T + float(e.r) and side <= 10.0 + float(e.r) and SimWorld.line_clear(sim, pos, e.pos):
 			hits.append([along, e])
 	Cs.sort_cmp(hits, func(a, b): return Cs.compare(a[0], b[0]))
+	var spear_dmg: float = float(GameSim.WEAPON_STATS["long_spear"][0])
 	for i in range(mini(2, hits.size())):
-		SimPlayers.hit(sim, hits[i][1], 22.0, p)
+		SimPlayers.hit(sim, hits[i][1], spear_dmg, p)
 	p.atk_cd = SimPlayers.attack_interval("long_spear", int(p.role))
 	SimPlayers.begin_attack_pose(p, "long_spear", GameSim.WEAPON_SWING_TIME)
 	SimAudio.emit(sim, "attack_long_spear", pos, p.id)

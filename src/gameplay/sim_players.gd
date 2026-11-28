@@ -21,6 +21,7 @@ static func apply_poison(sim: GameSim, p) -> void:
 	var now: float = float(sim.clock)
 	var active: bool = is_poisoned(sim, p)
 	p.poison_until = now + POISON_DURATION
+	p.poison_dmg = maxf(1.0, roundf(SimBalance.boss_damage(sim, POISON_DAMAGE)))
 	if not active:
 		p.poison_next = now + POISON_INTERVAL
 	if float(p.get("channel", 0.0)) > 0:
@@ -45,8 +46,9 @@ static func tick_poison(sim: GameSim, p) -> void:
 	var now: float = float(sim.clock)
 	while is_poisoned(sim, p) and now >= float(p.get("poison_next", INF)):
 		p.poison_next = float(p.poison_next) + POISON_INTERVAL
-		p.hp -= POISON_DAMAGE
-		p.taken += POISON_DAMAGE
+		var tick_dmg: float = float(p.get("poison_dmg", POISON_DAMAGE))
+		p.hp -= tick_dmg
+		p.taken += tick_dmg
 		if p.hp <= 0:
 			p.hit_kind = ""
 			clear_poison(p)

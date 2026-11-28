@@ -111,8 +111,8 @@ func check_boss(kind: int) -> void:
 func check_regular(type: int) -> void:
 	var e = reset(type)
 	var hits = step(3.0)
-	var expected: int = 4 if type == GameSim.GRUNT else 5
-	check(hits.size() == 3 and hits.all(func(h): return h[1] == expected), "regular type %d attacks repeatedly with reduced damage, without waiting to be hit" % type)
+	var expected: int = 6 if type == GameSim.GRUNT else 8
+	check(hits.size() == 3 and hits.all(func(h): return h[1] == expected), "regular type %d attacks repeatedly with balanced damage, without waiting to be hit" % type)
 	check(hits.size() >= 2 and hits[1][0] - hits[0][0] < 1.3, "regular type %d has no old two-second idle gap" % type)
 	check(sim.snapshot().en[0][9] or e.cd > 0, "regular type %d remains in a valid strike/cooldown state" % type)
 
@@ -121,7 +121,7 @@ func check_spitter() -> void:
 	var p = sim.players[1]
 	p.pos = field + Vector2(0, 4 * GameSim.T)
 	step(3.0)
-	check(sim.proj.size() == 3 and sim.proj.all(func(b): return b.dmg == 4), "Spitter fires every 1.25 seconds with four-damage projectiles")
+	check(sim.proj.size() == 3 and sim.proj.all(func(b): return b.dmg == 6), "Spitter fires every 1.25 seconds with six-damage projectiles")
 	# A wall within shooting range must trigger navigation rather than an idle or a shot through it.
 	var wall = {"id": 999, "kind": "stone", "pos": field + Vector2(0, 2 * GameSim.T), "vert": false, "hp": 400.0, "maxhp": 400.0}
 	sim.built_walls.append(wall)
@@ -178,7 +178,7 @@ func check_structure_damage() -> void:
 	sim.players[1].pos = field + Vector2(0, 10 * GameSim.T)
 	sim.doors[0] = GameSim.DOOR_HP
 	step(2.0)
-	check(is_equal_approx(GameSim.DOOR_HP - float(sim.doors[0]), 20.0), "Wrecker deals double structure damage (10 per hit every 1.25s) using the same door/player AI path as Grunt")
+	check(is_equal_approx(GameSim.DOOR_HP - float(sim.doors[0]), 32.0), "Wrecker deals double structure damage (16 per hit every 1.25s) using the same door/player AI path as Grunt")
 
 func check_real_tick_cadence() -> void:
 	# The player's immunity runs at 60 Hz while enemies run at 20 Hz. A cooldown must not waste

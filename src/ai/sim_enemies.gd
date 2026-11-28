@@ -45,15 +45,16 @@ static func spawn(sim: GameSim, ty, door, dist_tiles, any_side = null) -> Varian
 
 static func spawn_enemy(sim: GameSim, type: int, door: int, distance: float, any_side: bool) -> Variant:
 	var stats = GameSim.ENEMY[type]
-	var mode_stats = GameSim.MODE_MUL[int(sim.mode)]
 	var night_: int = int(sim.k)
+	var mode_: int = int(sim.mode)
 	var id: int = int(sim.next_id)
-	var growth: float = pow(1.1, night_ - 1)
 	var radius: float = (0.625 if type == WRECKER else 0.5) * T
-	var hp: float = float(stats[0]) * growth * float(mode_stats[1])
+	var hp: float = SimBalance.enemy_hp(float(stats[0]), night_, mode_)
+	var dmg: float = SimBalance.enemy_damage(float(stats[1]), night_, mode_)
+	var spd: float = SimBalance.night_speed_tiles(float(stats[2]), night_, mode_) * T * ENEMY_SPEED_MUL
 	var pos: Vector2 = spawn_position(sim, door, distance, any_side)
 	pos = sim.world.resolve_fast(pos, radius)
-	var enemy = {"id": id, "type": type, "pos": pos, "hp": hp, "maxhp": hp, "dmg": float(stats[1]) * growth * float(mode_stats[2]), "spd": minf(3.0, float(stats[2]) * pow(1.08, night_ - 1)) * T * ENEMY_SPEED_MUL, "door": door, "state": 0, "cd": 0.0, "hits": [], "target": 0, "anchor": Vector2.ZERO, "nodmg": 0.0, "r": radius}
+	var enemy = {"id": id, "type": type, "pos": pos, "hp": hp, "maxhp": hp, "dmg": dmg, "spd": spd, "door": door, "state": 0, "cd": 0.0, "hits": [], "target": 0, "anchor": Vector2.ZERO, "nodmg": 0.0, "r": radius}
 	sim.next_id = id + 1
 	sim.enemies.append(enemy)
 	return enemy

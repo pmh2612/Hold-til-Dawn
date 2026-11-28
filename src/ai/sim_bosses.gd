@@ -3,8 +3,8 @@ extends RefCounted
 
 # Part of GameSim (game_sim.gd); in the C# version this was src/ai/GameSim.Bosses.cs.
 # Rules only: the match state lives on GameSim, passed in as `sim`.
-# [code, name, HP at night 2 for 4 players on Medium, speed x Grunt] (table 4.2, BAL-39)
-static var BOSS_KINDS = [["NOX-01", "Juggernaut", 3900.0, 1.0], ["NOX-02", "Chainwarden", 4680.0, 0.75], ["NOX-03", "Bio-Cannon", 3510.0, 1.0], ["NOX-04", "Burrower", 3120.0, 1.0], ["NOX-05", "Earthshaker", 4290.0, 1.0], ["NOX-06", "Phantom", 3120.0, 1.0], ["NOX-07", "Voltspire", 2730.0, 1.0]]
+# [code, name, HP at night 2 for 4 players on Medium, speed x Grunt, effective uptime u_b] (FML-02/03, BAL-39)
+static var BOSS_KINDS = [["NOX-01", "Juggernaut", 4500.0, 1.0, 0.50], ["NOX-02", "Chainwarden", 4860.0, 0.75, 0.54], ["NOX-03", "Bio-Cannon", 4140.0, 1.0, 0.46], ["NOX-04", "Burrower", 3780.0, 1.0, 0.42], ["NOX-05", "Earthshaker", 4500.0, 1.0, 0.50], ["NOX-06", "Phantom", 3780.0, 1.0, 0.42], ["NOX-07", "Voltspire", 4140.0, 1.0, 0.46]]
 const TELEGRAPH: float = 1.0  # damaging special moves warn before impact; basic hits use the attack sprite
 const SLAM_WINDUP: float = 0.85
 const CHARGE_WINDUP: float = 0.55
@@ -56,19 +56,19 @@ static func boss_title(kind) -> Variant:
 	var b = BOSS_KINDS[int(kind)]
 	return "%s %s" % [b[0], b[1]]
 
-# Night 4: damage x1.21 and cooldowns x0.9, telegraphs unchanged (section 4.1).
+# Night 4: damage x1.21 and cooldowns x0.9; mode scales damage and cooldowns, telegraphs unchanged.
 static func boss_damage(sim: GameSim, base: float) -> float:
-	return base * (1.21 if sim.k >= 4 else 1.0) * float(GameSim.MODE_MUL[sim.mode][2])
+	return SimBalance.boss_damage(sim, base)
 
 static func boss_cooldown(sim: GameSim, base: float) -> float:
-	return base * (0.9 if sim.k >= 4 else 1.0)
+	return SimBalance.boss_cooldown(sim, base)
 
 static func setup_boss(sim: GameSim, e, kind: int) -> void:
 	var b = BOSS_KINDS[kind]
 	e.type = BOSS
 	e.kind = kind
 	# FML-02: HP scales with the team, x1.5625 on night 4, and with the mode
-	e.hp = b[2] * (1 + 0.8 * (sim.players.size() - 1)) / 3.4 * (1.5625 if sim.k == 4 else 1.0) * GameSim.MODE_MUL[sim.mode][1]
+	e.hp = SimBalance.boss_hp(float(b[2]), int(sim.k), sim.players.size(), int(sim.mode))
 	e.maxhp = e.hp
 	e.spd = e.spd * b[3]
 	# Smaller, more frequent structure hits preserve 15 base DPS. Gatebreaker's signature stays 120 / 8 s.

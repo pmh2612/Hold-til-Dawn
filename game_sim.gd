@@ -17,7 +17,7 @@ const SPEED = 5.0 * T
 const SCOUT_NIGHT_SIGHT: float = 6.5 * T
 static var ARMOUR = [0.0, 0.15, 0.3, 0.45]
 static var MODES = ["Easy", "Medium", "Hard"]
-static var MODE_MUL = [[0.75, 0.85, 0.8], [1.0, 1.0, 1.0], [1.25, 1.15, 1.2]]
+static var MODE_MUL = [[0.75, 0.80, 0.75], [1.0, 1.0, 1.0], [1.25, 1.20, 1.25]]
 static var RES = ["wood", "stone", "herb", "titanium"]
 # Permanent equipment, healing and maintenance are craftable. Tactical buffs/traps are chest loot only.
 static var RECIPES = [["Arrows", {"wood": 1}, 0, "arrow", 5, false], ["Stone spear", {"wood": 8, "stone": 12}, 0, "stone_spear", 1, false], ["Bow", {"wood": 8, "stone": 4}, 0, "bow", 1, false], ["Long spear", {"wood": 10, "stone": 8}, 0, "long_spear", 1, false], ["Titanium blade", {"wood": 10, "titanium": 20}, 2, "titanium_blade", 1, false], ["Stun maul", {"wood": 8, "titanium": 6}, 2, "stun_maul", 1, false], ["Explosive arrows", {"wood": 3, "stone": 4, "titanium": 2}, 2, "explosive_arrow", 3, false], ["Light armour", {"wood": 6}, 0, "light_armour", 1, false], ["Bandage", {"herb": 2}, 0, "bandage", 1, false], ["Revival kit", {"herb": 4, "titanium": 4}, 0, "revive", 1, false], ["Base repair", {"stone": 5}, 0, "base", 100, true], ["Stone armour", {"wood": 8, "stone": 16}, 0, "stone_armour", 1, false], ["Titanium armour", {"titanium": 24}, 2, "titanium_armour", 1, false], ["Healing flask", {"herb": 6, "titanium": 2}, 0, "healing_flask", 1, false], ["Field repair kit", {"wood": 4, "stone": 3, "titanium": 1}, 0, "repair_kit", 1, true], ["Chest key", {"wood": 2, "stone": 2}, 0, "chest_key", 1, false], ["Hammer", {"wood": 6, "stone": 4}, 0, "hammer", 1, false], ["Cargo frame", {"wood": 12, "stone": 6, "titanium": 2}, 0, "cargo_frame", 1, false]]
@@ -103,7 +103,7 @@ const GRUNT: int = 0
 const SPITTER: int = 1
 const WRECKER: int = 2
 const BOSS: int = 3
-static var ENEMY = [[40.0, 4.0, 2.0, 8, 1], [28.0, 4.0, 2.0, 12, 2], [70.0, 5.0, 1.6, 16, 3]]  # hp, damage per faster basic hit, speed tiles/s, cost, first night
+static var ENEMY = [[55.0, 6.0, 2.0, 8, 1], [38.0, 6.0, 2.0, 12, 2], [95.0, 8.0, 1.6, 16, 3]]  # hp, damage per hit, speed tiles/s, cost, first night
 
 var enemy_batch = []
 var audio_sequence: int = 0
@@ -190,7 +190,7 @@ static var ITEMS = {"wood": ["Wood", SimInventory.STACK, "res"], "stone": ["Ston
 # id -> [damage, attacks per second, reach or range in tiles, ranged, uses arrows] (BAL-08..10, BAL-42)
 const WEAPON_ATTACK_SPEED: float = 1.5
 const WEAPON_SWING_TIME: float = 0.25 / WEAPON_ATTACK_SPEED
-static var WEAPON_STATS = {"long_spear": [22.0, 1.0, 2.6, false, false], "stun_maul": [30.0, 0.65, 1.5, false, false], "fists": [15.0, 1.5, 1.5, false, false], "stone_spear": [20.0, 1.5, 1.5, false, false], "titanium_blade": [26.0, 1.5, 1.5, false, false], "hammer": [12.0, 1.2, 1.5, false, false], "starter_bow": [12.0, 1.0, 8.0, true, false], "bow": [12.0, 1.0, 8.0, true, true]}
+static var WEAPON_STATS = {"long_spear": [24.0, 1.0, 2.6, false, false], "stun_maul": [42.0, 0.65, 1.5, false, false], "fists": [11.0, 1.5, 1.5, false, false], "stone_spear": [16.0, 1.5, 1.5, false, false], "titanium_blade": [22.0, 1.5, 1.5, false, false], "hammer": [13.0, 1.2, 1.5, false, false], "starter_bow": [10.0, 1.0, 8.0, true, false], "bow": [18.0, 1.0, 8.0, true, true]}
 # armour items by tier; ARMOUR holds the matching values (BAL-11)
 static var ARMOUR_ITEMS = ["", "light_armour", "stone_armour", "titanium_armour"]
 # Team storage inside the base (BAL-18).
