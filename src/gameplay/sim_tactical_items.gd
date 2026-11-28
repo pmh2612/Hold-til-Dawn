@@ -5,6 +5,7 @@ extends RefCounted
 # Rules only: the match state lives on GameSim, passed in as `sim`.
 const MAX_VINE_TRAPS: int = 12
 const EXPLOSIVE_ARROW_DAMAGE: float = 40.0
+const HASTE_DURATION: float = 30.0
 
 # constants shared with GameSim
 const ARROW_SPEED = GameSim.ARROW_SPEED
@@ -26,7 +27,7 @@ static func tactical_description(id) -> Variant:
 		return ["DMG %d | Reach 2.6" % int(GameSim.WEAPON_STATS["long_spear"][0]), "Hits 2 targets"]
 	if id == "stun_maul":
 		return ["DMG %d | Stun 0.8s" % int(GameSim.WEAPON_STATS["stun_maul"][0])]
-	return ["Root: 2.5s"] if id == "vine_trap" else ["8 DMG/s | 5s"] if id == "poison_flask" else ["+8 HP/s | 5s"] if id == "healing_flask" else ["Speed +20% | 8s"] if id == "haste_tonic" else ["Hold E 2s: unlock", "Single use"] if id == "chest_key" else ["+100 HP: door / tower"] if id == "repair_kit" else []
+	return ["Root: 2.5s"] if id == "vine_trap" else ["8 DMG/s | 5s"] if id == "poison_flask" else ["+8 HP/s | 5s"] if id == "healing_flask" else ["Speed +20%% | %ds" % int(HASTE_DURATION)] if id == "haste_tonic" else ["Hold E 2s: unlock", "Single use"] if id == "chest_key" else ["+100 HP: door / tower"] if id == "repair_kit" else []
 
 static func player_speed(sim: GameSim, p) -> float:
 	var speed: float = float(SPEED) * (1.2 if int(p.role) == 0 else 1.0) * (1.2 if p.get("haste_until", 0.0) > float(sim.clock) else 1.0)
@@ -60,7 +61,7 @@ static func use_tactical_item(sim: GameSim, p, id, aim_point: Vector2) -> bool:
 		if p.get("haste_until", 0.0) > now:
 			SimPlayers.note(sim, p, "Already active")
 			return false
-		p.haste_until = now + 8.0
+		p.haste_until = now + HASTE_DURATION
 	elif id == "repair_kit":
 		return begin_field_repair(sim, p, aim_point)
 	elif id == "explosive_arrow":
@@ -120,6 +121,7 @@ static func tick_tactical_items(sim: GameSim) -> void:
 				if e.hp <= 0 or int(e.type) == BOSS or not SimBosses.hittable(sim, e) or Vector2(e.pos).distance_to(Vector2(trap.pos)) > float(e.r) + 16.0:
 					continue
 				e.stun_until = maxf(e.get("stun_until", 0.0), now + 2.5)
+				e.root_until = maxf(e.get("root_until", 0.0), now + 2.5)
 				sim.vine_traps.remove_at(i)
 				break
 	# Each actor receives a given area effect once per half-second, even where areas overlap.

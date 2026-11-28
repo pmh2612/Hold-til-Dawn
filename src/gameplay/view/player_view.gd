@@ -136,6 +136,8 @@ func draw_player(id, p, foot) -> void:
 	self.char_(id, skin, foot, aim, 1.0, tint, fighting or activity != "idle", activity, _v1 if _v1 != null else gather, _v2 if _v2 != null else 0.0, gather != null, held_item(p))
 	if poison_left > 0.0:
 		draw_poison_bubbles(id, Vector2(foot))
+	else:
+		main.tactical_items.draw_heal_aura(id, p, Vector2(foot))
 	if slow_left > 0.0:
 		draw_frost_shards(id, Vector2(foot))
 	self.draw_activity(foot, aim, activity)

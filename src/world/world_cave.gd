@@ -25,11 +25,15 @@ static func in_cave_floor(world: WorldGeometry, p: Vector2) -> bool:
 static func is_cave_interior(world: WorldGeometry, p: Vector2) -> bool:
 	return p.x < world.cave_entrance.x - 32 and in_cave_floor(world, p)
 
+const CAVE_OUTSIDE_COL: Color = Color("65645D")
+const CAVE_FLOOR_NEAR: Color = Color("50544A")
+const CAVE_FLOOR_DEEP: Color = Color("303D38")
+
 static func cave_ground_colour(world: WorldGeometry, p: Vector2) -> Color:
 	if not in_cave_floor(world, p):
-		return Color("65645D")
-	var depth: float = clampf((world.cave_entrance.x - p.x) / (24 * TL), 0, 1)
-	return Color("50544A").lerp(Color("303D38"), depth)
+		return CAVE_OUTSIDE_COL
+	var depth: float = clampf((world.cave_entrance.x - p.x) / (24 * TL), 0.0, 1.0)
+	return CAVE_FLOOR_NEAR.lerp(CAVE_FLOOR_DEEP, depth)
 
 static func build_walkable_cave(world: WorldGeometry) -> void:
 	world.cave_centre = (WorldLandmarks.at(world, 16) - WorldLandmarks.tl(12, 0)).round()

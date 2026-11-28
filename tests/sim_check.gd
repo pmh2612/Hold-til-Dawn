@@ -710,8 +710,8 @@ func check_items() -> void:
 	var sc = s.players[2]
 	var he = s.players[3]
 	self.check(eng.inv.size() == 8 and eng.inv[0][0] == "hammer" and eng.inv.filter(func(x): return x != null).size() == 1, "Engineer starts with only the hammer in 8 slots")
-	self.check(sc.inv[0][0] == "starter_bow" and he.inv.all(func(x): return x == null) and not he.has("flasks"), "Scout starts with a starter bow; Healer starts empty-handed with no free healing charges")
-	self.check(he.weapon == "fists" and GameSim.WEAPON_STATS["fists"][0] == 11.0, "an empty hand fights bare-handed with the calibrated basic weapon numbers (BAL-08)")
+	self.check(sc.inv[0][0] == "starter_bow" and he.inv[0] == ["healing_flask", 5] and he.inv.filter(func(x): return x != null).size() == 1 and not he.has("flasks"), "Scout starts with a starter bow; Healer starts with 5 healing flasks in slot 1 and no legacy free charges")
+	self.check(he.weapon == "fists" and GameSim.WEAPON_STATS["fists"][0] == 11.0, "holding a non-weapon item fights bare-handed with the calibrated basic weapon numbers (BAL-08)")
 	s.set_count(eng, "wood", 45)
 	self.check(s.count(eng, "wood") == 45 and eng.inv[4][1] == 20 and eng.inv[5][1] == 20 and eng.inv[1] == null and s.room(eng, "wood") == 15 + 4 * 20, "stacks hold 20 units and raw resources fill inner bag before hotbar")
 	s.set_count(eng, "stone", 200)

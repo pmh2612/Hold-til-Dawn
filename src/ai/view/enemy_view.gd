@@ -466,6 +466,8 @@ func draw_enemy(e, foot) -> void:
 		winding.erase(key_)
 		strike_at.erase(key_)
 	main.player_view.char_(key_, skin, foot, float(e[8]) if ty == GameSim.BOSS else null, s, mod_, play == "attack" or not skill.is_empty(), play if not skill.is_empty() else "idle", play, play_t, loop)
+	if main.snap.get("rooted", {}).has(e[0]):
+		main.tactical_items.draw_vine_root(e, Vector2(foot), size * s)
 	if e.size() > 10 and e[10]:
 		var at: Vector2 = Vector2(foot) - Vector2(0, size * s * 0.65)
 		main.draw_arc(at, 9.0, 0, TAU, 12, Color("DDD681"), 2.0)

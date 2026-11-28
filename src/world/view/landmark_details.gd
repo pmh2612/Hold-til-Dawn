@@ -4,11 +4,16 @@ extends RefCounted
 # Part of Main (main.gd); in the C# version this was src/world/view/Main.LandmarkDetails.cs.
 # Owner: Vu Duc Viet Anh. Ground colour and quiet wildlife distinguish Atlas locations at gameplay scale.
 # Visuals only: no extra lights, loot, damage or changes to the navigation mesh.
-const landmark_ground_budget_ms: float = 1.0
+const landmark_ground_budget_ms: float = 2.0
+const landmark_ground_idle_budget_ms: float = 5.0
+const landmark_ground_urgent_budget_ms: float = 12.0
+const lookahead_margin_px: float = 20.0 * Main.T
 var landmark_soil_world
 var landmark_soil_cache = {}
 var landmark_soil_jobs = []
 var profile_landmarks: bool = OS.get_cmdline_user_args().find("--profile-landmarks") >= 0
+var last_view: Rect2 = Rect2()
+var has_view: bool = false
 
 var has_pending_landmark_ground: bool:
 	get:
@@ -21,84 +26,188 @@ var main: Main
 func _init(host: Main) -> void:
 	main = host
 
-func draw_landmark_soils(w, view: Rect2) -> void:
-	if not is_same(landmark_soil_world, w):
-		for job in landmark_soil_cache.values():
-			pass
-			pass
-		landmark_soil_cache.clear()
-		landmark_soil_jobs.clear()
-		landmark_soil_world = w
+func _ensure_world(w) -> void:
+	if w == null or is_same(landmark_soil_world, w):
+		return
+	landmark_soil_cache.clear()
+	landmark_soil_jobs.clear()
+	landmark_soil_world = w
+	var focus: Vector2 = Vector2(main.local_pos) if main != null else Vector2.ZERO
 	for surface in WorldGeometry.landmark_soils:
-		var _d1 = surface
-		var id = _d1.id
-		var rx = _d1.rx
-		var ry = _d1.ry
-		var hex_ = _d1.hex
+		var id: int = surface.id
 		if not w.lm_at.has(id):
 			continue
+		var rx: float = surface.rx
+		var ry: float = surface.ry
 		var c: Vector2 = w.soil_centre(surface)
-		if not Cs.has_point(view.grow(rx * 32), c):
-			continue
-		var job = landmark_soil_cache.get(id, null)
-		if not landmark_soil_cache.has(id):
-			# Queue work while the location is still in the camera's off-screen culling margin.
-			# Never scan terrain, paint an image or upload a texture from _Draw().
-			var origin: Vector2 = (c - Vector2(rx * 32, ry * 32)).floor()
-			var bottom: int = maxi(int(ry * 32), 112) if id == 5 or id == 7 else int(ry * 32)
-			job = Cs.init(LandmarkSoilJob.new(), {"id": id, "centre": c, "rx": rx, "ry": ry, "soil": Color(hex_), "surface": surface, "fleck": Color(Color(hex_).lightened(0.15), 0.7), "min_x": -int(rx * 32), "x": -int(rx * 32), "max_x": int(rx * 32), "y": -int(ry * 32), "max_y": int(ry * 32), "area": Rect2(origin, Vector2(int(rx * 64) + 8, bottom + int(ry * 32) + 8))})
-			landmark_soil_cache[id] = job
-			landmark_soil_jobs.push_back(job)
-		if job.texture != null:
+		var origin: Vector2 = (c - Vector2(rx * 32.0, ry * 32.0)).floor()
+		var bottom: int = maxi(int(ry * 32.0), 112) if id == 5 or id == 7 else int(ry * 32.0)
+		var soil := Color(surface.hex)
+		var job := LandmarkSoilJob.new()
+		job.id = id
+		job.centre = c
+		job.rx = rx
+		job.ry = ry
+		job.soil = soil
+		job.soil_light = soil.lightened(0.035)
+		job.soil_dark = soil.darkened(0.035)
+		job.fleck = Color(soil.lightened(0.15), 0.7)
+		job.surface = surface
+		job.min_x = -int(rx * 32.0)
+		job.x = job.min_x
+		job.max_x = int(rx * 32.0)
+		job.y = -int(ry * 32.0)
+		job.max_y = int(ry * 32.0)
+		job.area = Rect2(origin, Vector2(int(rx * 64.0) + 8, bottom + int(ry * 32.0) + 8))
+		landmark_soil_cache[id] = job
+		landmark_soil_jobs.push_back(job)
+	# Bake nearest-to-base / player landmarks first so ground is ready long before arrival.
+	landmark_soil_jobs.sort_custom(func(a, b): return a.centre.distance_squared_to(focus) < b.centre.distance_squared_to(focus))
+
+func _prioritize_jobs(view: Rect2) -> void:
+	if landmark_soil_jobs.is_empty():
+		return
+	var lookahead: Rect2 = view.grow(lookahead_margin_px)
+	var view_centre: Vector2 = view.get_center()
+	var best_idx: int = -1
+	var best_urgent: bool = false
+	var best_dist: float = INF
+	for i in range(landmark_soil_jobs.size()):
+		var job: LandmarkSoilJob = landmark_soil_jobs[i]
+		var on_screen: bool = job.area.intersects(view)
+		job.urgent = on_screen
+		if on_screen or job.area.intersects(lookahead):
+			var d: float = job.centre.distance_squared_to(view_centre)
+			if best_idx == -1 or (on_screen and not best_urgent) or (on_screen == best_urgent and d < best_dist):
+				best_idx = i
+				best_urgent = on_screen
+				best_dist = d
+	if best_idx > 0:
+		var promoted = landmark_soil_jobs[best_idx]
+		landmark_soil_jobs.remove_at(best_idx)
+		landmark_soil_jobs.push_front(promoted)
+
+func draw_landmark_soils(w, view: Rect2) -> void:
+	_ensure_world(w)
+	last_view = view
+	has_view = true
+	if landmark_soil_jobs.size() > 0:
+		_prioritize_jobs(view)
+	for job in landmark_soil_cache.values():
+		if job.texture != null and job.area.intersects(view):
 			main.draw_texture_rect(job.texture, job.area, false)
 
 # All Godot image/texture operations remain on the main thread, with a small CPU budget per rendered frame.
 func tick_landmark_ground() -> void:
-	if landmark_soil_jobs.size() == 0:
+	if main != null and main.geometry != null:
+		_ensure_world(main.geometry)
+	if landmark_soil_jobs.is_empty():
 		return
+	if has_view:
+		_prioritize_jobs(last_view)
+	var ph: String = str(main.snap.get("ph", "")) if main != null else ""
+	var in_game: bool = ph in ["day", "dusk", "night", "result"]
 	var started: int = Time.get_ticks_usec()
-	var limit: int = started + int(1000000 * landmark_ground_budget_ms / 1000)
-	var job = landmark_soil_jobs.front()
-	if job.mask == null: job.mask = LandmarkGroundMask.new(landmark_soil_world, job.area)
-	if job.image == null: job.image = Image.create_empty(int(job.area.size.x), int(job.area.size.y), false, Image.FORMAT_RGBA8)
-	while true:
-		if job.y <= job.max_y:
-			paint_landmark_cell(job)
-			job.x += 4
-			if job.x > job.max_x:
-				job.x = job.min_x
-				job.y += 4
-		else:
-			job.texture = ImageTexture.create_from_image(job.image)
-			pass
+	while landmark_soil_jobs.size() > 0:
+		var job: LandmarkSoilJob = landmark_soil_jobs.front()
+		var budget_ms: float = landmark_ground_urgent_budget_ms if job.urgent else (landmark_ground_budget_ms if in_game else landmark_ground_idle_budget_ms)
+		var limit: int = started + int(budget_ms * 1000.0)
+		var job_started: int = Time.get_ticks_usec()
+		if job.mask == null:
+			job.mask = LandmarkGroundMask.new(landmark_soil_world, job.area, 8.0, false)
+		if job.image == null:
+			job.image = Image.create_empty(int(job.area.size.x), int(job.area.size.y), false, Image.FORMAT_RGBA8)
+		var is_cave: bool = job.id == 16
+		var cx: float = job.centre.x
+		var cy: float = job.centre.y
+		var ox: float = job.area.position.x
+		var oy: float = job.area.position.y
+		var min_x: int = job.min_x
+		var max_x: int = job.max_x
+		var max_y: int = job.max_y
+		var surface = job.surface
+		var mask: LandmarkGroundMask = job.mask
+		var img: Image = job.image
+		var soil: Color = job.soil
+		var soil_light: Color = job.soil_light
+		var soil_dark: Color = job.soil_dark
+		var fleck: Color = job.fleck
+		var fleck_a: float = fleck.a
+		var fast_mask: bool = mask.no_river and mask.all_inland and mask.floors.is_empty() and mask.ponds.is_empty()
+		var cave_poly := PackedVector2Array()
+		var cave_box := Rect2()
+		var cave_ent_x: float = 0.0
+		var cave_inv_depth: float = 1.0 / (24.0 * WorldGeometry.TL)
+		if is_cave:
+			if job.cave_poly.is_empty():
+				job.cave_poly = PackedVector2Array(landmark_soil_world.cave_floor)
+				if job.cave_poly.size() > 0:
+					var cb := Rect2(job.cave_poly[0], Vector2.ZERO)
+					for pt in job.cave_poly:
+						cb = cb.expand(pt)
+					job.cave_box = cb
+			cave_poly = job.cave_poly
+			cave_box = job.cave_box
+			cave_ent_x = landmark_soil_world.cave_entrance.x
+		var x: int = job.x
+		var y: int = job.y
+		while y <= max_y:
+			var py_f: float = roundf(cy + float(y))
+			var py_i: int = int(py_f)
+			var dy_off: float = py_f - cy
+			var iy: int = int(roundf(py_f - oy))
+			var py_hash: int = py_i * 668265263
+			while x <= max_x:
+				var px_f: float = roundf(cx + float(x))
+				var coverage: float = WorldLandmarkDetails.soil_coverage(surface, Vector2(px_f - cx, dy_off))
+				if coverage > 0.0:
+					var p := Vector2(px_f, py_f)
+					if fast_mask or mask.can_paint(p, 3.0, true, false):
+						var px_i: int = int(px_f)
+						var noise: float = float((((px_i * 374761393 + py_hash) & 0xFFFFFFFF) ^ 0x5bd1e995) % 1000) * 0.001
+						var ix: int = int(roundf(px_f - ox))
+						var patch: Color
+						var base: Color
+						if is_cave:
+							if cave_box.has_point(p) and Geometry2D.is_point_in_polygon(p, cave_poly):
+								var depth_t: float = clampf((cave_ent_x - px_f) * cave_inv_depth, 0.0, 1.0)
+								base = WorldCave.CAVE_FLOOR_NEAR.lerp(WorldCave.CAVE_FLOOR_DEEP, depth_t)
+								patch = base.lightened(0.035) if noise > 0.72 else base.darkened(0.035) if noise < 0.22 else base
+							else:
+								base = soil
+								patch = soil_light if noise > 0.72 else soil_dark if noise < 0.22 else soil
+						else:
+							patch = soil_light if noise > 0.72 else soil_dark if noise < 0.22 else soil
+						patch.a = coverage
+						img.fill_rect(Rect2i(ix, iy, 4, 4), patch)
+						if noise > 0.92:
+							img.fill_rect(Rect2i(ix + 1, iy + 2, 2, 1), Color(fleck.r, fleck.g, fleck.b, fleck_a * coverage))
+						if is_cave and noise < 0.025:
+							img.fill_rect(Rect2i(ix, iy, 4, 1), Color(base.darkened(0.18), coverage))
+				x += 4
+			x = min_x
+			y += 4
+			if Time.get_ticks_usec() >= limit:
+				break
+		job.x = x
+		job.y = y
+		var finished: bool = y > max_y
+		if finished:
+			job.texture = ImageTexture.create_from_image(img)
 			job.image = null
+			job.mask = null
+			job.cave_poly = PackedVector2Array()
+			job.urgent = false
 			landmark_soil_jobs.pop_front()
+		var job_elapsed: int = Time.get_ticks_usec() - job_started
+		job.work_ticks += job_elapsed
+		job.slices += 1
+		if profile_landmarks and finished:
+			print("LANDMARK BAKE %02d: %.2f ms across %s frames; worst slice %.2f ms" % [job.id, job.work_ticks * 1000.0 / 1000000.0, job.slices, maxf(landmark_ground_worst_slice_ms, (Time.get_ticks_usec() - started) * 1000.0 / 1000000.0)])
+		if not finished or Time.get_ticks_usec() >= limit:
 			break
-		if not (Time.get_ticks_usec() < limit): break
 	var elapsed: int = Time.get_ticks_usec() - started
-	job.work_ticks += elapsed
-	job.slices += 1
-	landmark_ground_worst_slice_ms = maxf(landmark_ground_worst_slice_ms, elapsed * 1000.0 / 1000000)
-	if profile_landmarks and job.texture != null:
-		print("LANDMARK BAKE %02d: %.2f ms across %s frames; worst slice %.2f ms" % [job.id, job.work_ticks * 1000.0 / 1000000, job.slices, landmark_ground_worst_slice_ms])
-
-func paint_landmark_cell(job) -> void:
-	var p: Vector2 = (job.centre + Vector2(job.x, job.y)).round()
-	var coverage: float = WorldLandmarkDetails.soil_coverage(job.surface, p - job.centre)
-	var noise: float = LandmarkView.h01(int(p.x), int(p.y))
-	if coverage <= 0 or not job.mask.can_paint(p, 3, true, false):
-		return
-	var base: Color = landmark_soil_world.cave_ground_colour(p) if job.id == 16 else job.soil
-	var patch: Color = base.lightened(0.035) if noise > 0.72 else base.darkened(0.035) if noise < 0.22 else base
-	patch.a = coverage
-	fill_landmark(job, p, Vector2i(4, 4), patch)
-	if noise > 0.92:
-		fill_landmark(job, p + Vector2(1, 2), Vector2i(2, 1), Color(job.fleck, job.fleck.a * coverage))
-	if job.id == 16 and noise < 0.025:
-		fill_landmark(job, p, Vector2i(4, 1), Color(base.darkened(0.18), coverage))
-
-static func fill_landmark(job, p: Vector2, size: Vector2i, colour: Color) -> void:
-	job.image.fill_rect(Rect2i(Vector2i((p - job.area.position).round()), size), colour)
+	landmark_ground_worst_slice_ms = maxf(landmark_ground_worst_slice_ms, elapsed * 1000.0 / 1000000.0)
 
 func draw_landmark_life(w, view: Rect2, time: float) -> void:
 	var night: bool = main.snap.get("ph", "day") == "night"
@@ -140,10 +249,15 @@ class LandmarkSoilJob:
 	var centre: Vector2 = Vector2.ZERO
 	var area: Rect2 = Rect2()
 	var soil: Color = Color(0, 0, 0, 0)
+	var soil_light: Color = Color(0, 0, 0, 0)
+	var soil_dark: Color = Color(0, 0, 0, 0)
 	var fleck: Color = Color(0, 0, 0, 0)
 	var image
 	var texture
 	var mask
+	var cave_poly: PackedVector2Array = PackedVector2Array()
+	var cave_box: Rect2 = Rect2()
 	var surface = WorldGeometry.LandmarkSoil.new()
+	var urgent: bool = false
 	var work_ticks: int = 0
 	var slices: int = 0

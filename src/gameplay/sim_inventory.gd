@@ -234,12 +234,13 @@ static func set_count(sim: GameSim, p, id, n) -> void:
 	add_to_player(p.inv, id, int(n))
 
 static func give_starting_kit(sim: GameSim, p) -> void:
-	# Team change to BAL-42: no basic weapon item; everyone fights bare-handed when the selected slot holds
-	# No weapon. Scout: starter bow; Engineer: hammer; Healer: empty hands.
+	# Starting kits by role: Scout gets starter bow; Healer starts with 5 healing flasks; Engineer gets hammer.
 	p.inv = empty_slots(INV_SLOTS)
 	p.bag_tier = 0
 	if p.role == 0:
 		p.inv[0] = ["starter_bow", 1]
+	elif p.role == 1:
+		p.inv[0] = ["healing_flask", 5]
 	elif p.role == 2:
 		p.inv[0] = ["hammer", 1]
 	p.sel = 0

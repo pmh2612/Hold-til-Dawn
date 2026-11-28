@@ -22,7 +22,7 @@ var role_cards = []
 var bot_buttons = []
 var portraits = {}
 var audio_credits: AcceptDialog
-static var ROLE_INFO = [["MOBILITY", "Fast movement & attacks"], ["SUPPORT", "Fast healing & revives"], ["DEFENCE", "Towers & repairs"]]
+static var ROLE_INFO = [["MOBILITY", "Fast movement & attacks"], ["SUPPORT", "5 Healing flasks & fast revives"], ["DEFENCE", "Towers & repairs"]]
 
 # constants shared with Main
 const GOLD = Main.GOLD

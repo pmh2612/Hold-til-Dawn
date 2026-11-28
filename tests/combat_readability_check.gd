@@ -224,7 +224,8 @@ func check_healing() -> void:
 	ally.hp = 40
 	p.pos = Vector2(0, 640)
 	ally.pos = p.pos + Vector2(30, 0)
-	check(not p.has("flasks") and sim.snapshot().ps[1][10] == 0, "Healer has no free charges or +3 HUD counter")
+	check(not p.has("flasks") and sim.count(p, "healing_flask") == 5 and sim.snapshot().ps[1][10] == 0, "Healer starts with 5 healing flasks in inventory and no legacy +3 free counter")
+	sim.set_count(p, "healing_flask", 0)
 	for i in range(5):
 		sim.action(1, "flask", ally.pos)
 		sim.action(1, "use_healing_flask", ally.pos)
